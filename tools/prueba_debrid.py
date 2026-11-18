@@ -121,6 +121,40 @@ try:
 except debrid.DebridError as e:
     comprobar("PM: error con su mensaje (%s)" % e, "Not premium" in str(e))
 
+# --- TorBox -------------------------------------------------------------------
+def tb_con(respuestas):
+    s = debrid.TorBox(Aj(tb_activo="true", tb_apikey="K"), **sin_espera)
+    vistas = []
+
+    def falso(ruta, params=None, formulario=None):
+        vistas.append((ruta, params, formulario))
+        r = respuestas.pop(0)
+        if isinstance(r, Exception):
+            raise r
+        return r
+    s._api = falso
+    return s, vistas
+
+
+tb, v = tb_con([{"torrent_id": 7}, {"download_finished": True, "files": [
+    {"id": 0, "name": "Peli/Peli.2160p.mkv", "size": 20e9}, {"id": 1, "name": "Peli/sample.mkv", "size": 1e8}]},
+    "https://tb/descarga.mkv"])
+comprobar("TB: magnet listo -> vídeo grande y enlace", tb.resolver("magnet:?xt=urn:btih:abc") == "https://tb/descarga.mkv"
+          and v[2][1] == {"token": "K", "torrent_id": 7, "file_id": 0} and v[0][2]["magnet"].startswith("magnet:"))
+tb, v = tb_con([{"torrent_id": 8}, {"download_finished": False, "progress": 0.42}])
+try:
+    tb.resolver("magnet:?xt=urn:btih:def")
+    comprobar("TB: magnet no listo", False)
+except debrid.NoListo as e:
+    comprobar("TB: magnet no listo avisa (%s)" % e, "42%" in str(e))
+tb, v = tb_con([{"webdownload_id": 3}, {"download_present": True, "files": [{"id": 5, "name": "x.mp4", "size": 9e8}]},
+                "https://tb/web.mp4"])
+comprobar("TB: enlace de alojamiento -> descarga web", tb.resolver("https://rapidgator.net/file/x") == "https://tb/web.mp4"
+          and v[2][1]["web_id"] == 3 and v[2][1]["file_id"] == 5)
+body, tipo = debrid._multipart({"magnet": "magnet:?x"})
+comprobar("TB: formulario multipart bien formado", tipo.startswith("multipart/form-data; boundary=")
+          and b'name="magnet"' in body and body.endswith(b"--\r\n"))
+
 # --- centro: orden y salto entre servicios -------------------------------------
 class Falso(debrid.Servicio):
     def __init__(self, nombre, admite, resultado):
@@ -147,6 +181,13 @@ except debrid.DebridError as e:
     comprobar("centro: magnet sin servicios avisa (%s)" % e, "Debrid" in str(e))
 aj = Aj(ad_activo="true", ad_apikey="x", rd_activo="false", rd_token="y", pm_activo="true")
 comprobar("centro: solo cuenta los encendidos Y vinculados", [s.id for s in debrid.activos(aj, **sin_espera)] == ["ad"])
+try:
+    debrid.TorBox(Aj(tb_apikey="clave-falsa"), **sin_espera)._yo()
+    comprobar("TB real: clave falsa rechazada", False)
+except debrid.DebridError as e:
+    comprobar("TB real: clave falsa rechazada (%s)" % str(e)[:40], True)
+debrid._peticion = real_peticion
+comprobar("TB real: alojamientos (rapidgator admitido)", debrid.TorBox(Aj(tb_apikey="x"), **sin_espera).admite("https://rapidgator.net/file/abc"))
 
 # --- API pública real ------------------------------------------------------------
 debrid._peticion = real_peticion

@@ -109,7 +109,7 @@ def _mod(nombre, **attrs):
 
 
 _mod("xbmc", LOGINFO=1, log=lambda m, l=0: print("   LOG", m),
-     executebuiltin=lambda c: REGISTRO["builtin"].append(c), sleep=lambda ms: None, Player=_Player,
+     executebuiltin=lambda c: REGISTRO["builtin"].append(c), sleep=lambda ms: None, Player=_Player, getInfoLabel=lambda k: "",
      Monitor=lambda: types.SimpleNamespace(abortRequested=lambda: True, waitForAbort=lambda s: True), getCondVisibility=lambda c: False)
 _mod("xbmcvfs", translatePath=lambda p: TMP)
 _mod("xbmcaddon", Addon=lambda: types.SimpleNamespace(

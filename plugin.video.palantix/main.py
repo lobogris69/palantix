@@ -12,7 +12,7 @@ import xbmcplugin
 import xbmcvfs
 
 from resources.lib import etiquetas, listas
-from resources.lib import debrid, novedades, progreso, seguimiento
+from resources.lib import debrid, novedades, progreso, seguimiento, subtitulos, trakt
 from resources.lib import tmdb as tmdb_mod
 from resources.lib.providers import ListaURL, Peli, buscar_fuentes
 
@@ -189,8 +189,12 @@ def resolver(enlace, avisar=True):
             progreso.close()
 
 
+def servicio_por_id(sid):
+    return trakt.Trakt(AJ, log=log) if sid == "trakt" else debrid.por_id(sid, AJ, **_kw())
+
+
 def vincular():
-    s = debrid.por_id(PARAMS["s"], AJ, **_kw())
+    s = servicio_por_id(PARAMS["s"])
     if s.tipo_vinculo == "clave":
         clave = xbmcgui.Dialog().input("Clave de la API de %s (la ves en tu cuenta, en la web)" % s.nombre)
         if not clave:
@@ -203,6 +207,9 @@ def vincular():
             return xbmcgui.Dialog().ok(s.nombre, "La clave no funciona: %s" % e)
         AJ.set(s.id + "_activo", "true")
         return xbmcgui.Dialog().ok(s.nombre, "Cuenta vinculada.\n" + texto)
+    if PARAMS["s"] == "trakt" and not s.configurado():
+        return xbmcgui.Dialog().ok("Trakt", "Primero crea tu aplicación en trakt.tv/oauth/applications\n"
+                                   "(redirect: urn:ietf:wg:oauth:2.0:oob) y pega aquí Client ID y Client Secret.")
     try:
         pin = s.iniciar_pin()
     except Exception as e:
@@ -220,7 +227,7 @@ def vincular():
             if s.comprobar_pin(pin["datos"]):
                 progreso.close()
                 return xbmcgui.Dialog().ok(s.nombre, "Cuenta vinculada correctamente.")
-        except debrid.DebridError as e:
+        except (debrid.DebridError, trakt.TraktError) as e:
             progreso.close()
             return aviso(str(e))
         xbmc.sleep(paso * 1000)
@@ -229,7 +236,7 @@ def vincular():
 
 
 def ver_cuenta():
-    s = debrid.por_id(PARAMS["s"], AJ, **_kw())
+    s = servicio_por_id(PARAMS["s"])
     if not s.vinculado():
         return xbmcgui.Dialog().ok(s.nombre, "Aún no has vinculado la cuenta.")
     try:
@@ -371,6 +378,15 @@ def menu():
     extra = color("● %d con capítulos nuevos" % nuevas, VERDE) if nuevas else (
         color("%d con capítulos pendientes" % pendientes, AZUL) if pendientes else "")
     carpeta("Series en seguimiento" + ("  " + extra if extra else ""), url(accion="seguir"), "DefaultTVShows.png")
+    tk = trakt.Trakt(AJ, log=log)
+    if tk.encendido():
+        carpeta("Trakt", url(accion="trakt"), "DefaultAddonService.png")
+        if ADDON.getSetting("trakt_listas_auto") != "false":
+            try:
+                for lid, nombre, n in tk.listas():
+                    carpeta("%s  %s" % (nombre, color("(%d) · Trakt" % n, GRIS)), url(accion="trakt_lista", id=lid))
+            except Exception as e:
+                log("Trakt listas: %s" % e)
     carpeta("Mis favoritas", url(accion="favoritas"), "DefaultFavourites.png")
     carpeta("Mis listas", url(accion="listas"), "DefaultPlaylist.png")
     carpeta("Ajustes", url(accion="ajustes"), "DefaultAddonService.png")
@@ -551,6 +567,53 @@ def a_medias():
 def quitar_medias():
     progreso.quitar(PERFIL, PARAMS["k"])
     xbmc.executebuiltin("Container.Refresh")
+
+
+def _fichas_tmdb(t, elementos):
+    """[(tipo, tmdb_id)] -> fichas completas de TMDB (carátula, sinopsis...), pedidas en paralelo."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    def una(e):
+        tipo, tid = e
+        try:
+            if tipo == "pelicula":
+                return ficha_pelicula(t.detalle(tid))
+            d = t.serie(tid)
+            d.setdefault("id", tid)
+            return ficha_serie(d)
+        except Exception as ex:
+            log("TMDB %s %s: %s" % (tipo, tid, ex))
+            return None
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        return [f for f in pool.map(una, elementos[:60]) if f]
+
+
+def menu_trakt():
+    carpeta("Películas pendientes", url(accion="trakt_pend", tipo="movies"), "DefaultMovies.png")
+    carpeta("Series pendientes", url(accion="trakt_pend", tipo="shows"), "DefaultTVShows.png")
+    try:
+        for lid, nombre, n in trakt.Trakt(AJ, log=log).listas():
+            carpeta("%s  %s" % (nombre, color("(%d)" % n, GRIS)), url(accion="trakt_lista", id=lid))
+    except Exception as e:
+        aviso(str(e))
+    xbmcplugin.endOfDirectory(HANDLE)
+
+
+def trakt_pendientes(t):
+    tipo = PARAMS.get("tipo", "movies")
+    elems = [("pelicula" if tipo == "movies" else "serie", tid) for tid, _, _ in trakt.Trakt(AJ, log=log).pendientes(tipo)]
+    xbmcplugin.setContent(HANDLE, "movies" if tipo == "movies" else "tvshows")
+    fichas = _fichas_tmdb(t, elems)
+    xbmcplugin.addDirectoryItems(HANDLE, fichas, len(fichas))
+    xbmcplugin.endOfDirectory(HANDLE)
+
+
+def trakt_lista(t):
+    elems = [(tipo, tid) for tipo, tid, _, _ in trakt.Trakt(AJ, log=log).lista(PARAMS["id"])]
+    xbmcplugin.setContent(HANDLE, "movies")
+    fichas = _fichas_tmdb(t, elems)
+    xbmcplugin.addDirectoryItems(HANDLE, fichas, len(fichas))
+    xbmcplugin.endOfDirectory(HANDLE)
 
 
 def dejar_seguir():
@@ -763,8 +826,39 @@ def reproducir():
         li = xbmcgui.ListItem(path=ruta)
         if desde:
             li.setProperty("StartOffset", str(int(desde)))
+        sub = poner_subtitulos(peli, a, pref)
+        if sub:
+            li.setSubtitles([sub])
         return xbmcplugin.setResolvedUrl(HANDLE, True, li)
     no_reproducir()
+
+
+def poner_subtitulos(peli, analisis, pref):
+    """Descarga el mejor subtítulo en tu idioma si el audio de la fuente no lo es (o siempre, según Ajustes)."""
+    clave = ADDON.getSetting("os_apikey").strip()
+    modo = ajuste_int("subs_modo", 1)
+    if not clave or not subtitulos.hace_falta(modo, analisis["idiomas"], pref["idioma"]):
+        return None
+    cliente = subtitulos.OpenSubtitles(clave, ADDON.getSetting("os_usuario"), ADDON.getSetting("os_clave"), log=log)
+    try:
+        lista = cliente.buscar(peli.tmdb_id, ADDON.getSetting("subs_idiomas") or "es",
+                               peli.temporada if peli.tipo == "episodio" else 0,
+                               peli.episodio if peli.tipo == "episodio" else 0)
+        if not lista:
+            aviso("No hay subtítulos en tu idioma para «%s»" % peli.titulo)
+            return None
+        carpeta = os.path.join(PERFIL, "subtitulos")
+        ruta = cliente.descargar(lista[0]["file_id"], carpeta, peli.titulo)
+        viejos = sorted((os.path.join(carpeta, f) for f in os.listdir(carpeta)), key=os.path.getmtime)
+        for f in viejos[:-30]:  # guardamos solo los 30 últimos
+            os.remove(f)
+        aviso("Subtítulos en español puestos")
+        return ruta
+    except subtitulos.SubError as e:
+        aviso(str(e))
+    except Exception as e:
+        log("Subtítulos: %s" % e)
+    return None
 
 
 def avisar_al_servicio(peli):
@@ -808,6 +902,7 @@ SIN_TMDB = {
     "anios": lambda: anios(PARAMS["destino"]),
     "dejar_seguir": dejar_seguir,
     "a_medias": a_medias,
+    "trakt": menu_trakt,
     "quitar_medias": quitar_medias,
     "trailer": trailer,
     "ajustes": ADDON.openSettings,
@@ -833,6 +928,10 @@ def con_tmdb(t, accion, page):
         listar(t.saga(PARAMS["id"]), "saga", id=PARAMS["id"])
     elif accion == "seguir":
         seguir_viendo(t)
+    elif accion == "trakt_pend":
+        trakt_pendientes(t)
+    elif accion == "trakt_lista":
+        trakt_lista(t)
     elif accion == "generos":
         generos(t.generos(), "genero")
     elif accion == "s_generos":

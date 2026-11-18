@@ -5,7 +5,7 @@ fuentes enchufables (listas propias JSON/M3U, Internet Archive) y servicios Debr
 
 ## Instalar en la tele (igual que Palantir 3)
 1. Ajustes > Sistema > Complementos > activar **Orígenes desconocidos**.
-2. Ajustes > Explorador de archivos > **Añadir fuente** > `https://USUARIO.github.io/palantix/` · nombre `palantix`.
+2. Ajustes > Explorador de archivos > **Añadir fuente** > `https://lobogris69.github.io/palantix/` · nombre `palantix`.
 3. Complementos > **Instalar desde un archivo zip** > `palantix` > `repository.palantix-1.0.0.zip`.
 4. **Instalar desde repositorio** > Repositorio Palantix > Complementos de vídeo > **Palantix**.
 5. Abre Palantix > Ajustes: pega tu clave gratuita de TMDB (themoviedb.org > Ajustes > API).
@@ -14,7 +14,7 @@ A partir de ahí las versiones nuevas llegan solas.
 
 ### Publicar una versión nueva
 1. Sube el número de `version` en `plugin.video.palantix/addon.xml`.
-2. `python tools/construir_repo.py https://USUARIO.github.io/palantix/`
+2. `python tools/construir_repo.py https://lobogris69.github.io/palantix/`
 3. Sube a GitHub (la carpeta `docs/` es la que sirve GitHub Pages: Settings > Pages > rama main, carpeta /docs).
 
 ## Qué tiene
@@ -42,10 +42,26 @@ A partir de ahí las versiones nuevas llegan solas.
 
 **Servicios Debrid** (Ajustes > Servicios Debrid)
 - AllDebrid y Real-Debrid: se vinculan con un **código en pantalla** (lo metes desde el móvil).
-- Premiumize: con la clave de la API de tu cuenta.
+- Premiumize y TorBox: con la clave de la API de tu cuenta.
 - Se prueban en orden: si uno falla, el siguiente. Magnets solo si ya están descargados en el servicio
   (si no, se quedan descargando en tu cuenta para más tarde).
 - Aviso cuando a una cuenta le quedan 7 días o menos.
+
+**Trakt** (Ajustes > Trakt)
+- Crea tu aplicación gratis en trakt.tv/oauth/applications (nombre «Palantix», redirect `urn:ietf:wg:oauth:2.0:oob`),
+  pega Client ID y Client Secret y vincula con el código en pantalla.
+- Lo que ves se marca solo en tu Trakt (a partir del 80 %).
+- Menú Trakt: películas y series pendientes y tus listas personales (también directamente en el menú principal).
+- Al terminar te pregunta qué te ha parecido (nunca / a veces / siempre) y guarda la nota en Trakt.
+
+**Subtítulos** (Ajustes > Subtítulos)
+- Con una clave gratuita de OpenSubtitles (opensubtitles.com > API consumers): si el audio no está en tu idioma,
+  se descarga y se pone solo el mejor subtítulo en español (los más descargados; las traducciones automáticas, al final).
+
+**Saltar intro**
+- Si el vídeo trae un capítulo «Intro»/«Opening», sale el botón «Saltar intro ▶▶».
+- Y aprende de ti: la primera vez que adelantas la intro de una serie, la apunta; en los siguientes capítulos
+  te ofrece el botón en ese momento (y afina la media cada vez).
 
 **Otros**: favoritas, tráiler (con el addon de YouTube), Internet Archive (cine de dominio público).
 
@@ -77,4 +93,5 @@ Clase en `resources/lib/providers/` que herede de `Proveedor` (ver `base.py`), a
 - `python tools/prueba_local.py`: simula Kodi y recorre menús, listas, series, seguimiento, progreso y servicio.
 - `python tools/prueba_debrid.py`: Real-Debrid, Premiumize y el orden entre servicios (+ API pública real).
 - `python tools/prueba_alldebrid.py`: AllDebrid (con `ALLDEBRID_APIKEY=...` prueba tu cuenta real).
+- `python tools/prueba_extras.py`: subtítulos, Trakt y saltar intro (+ API reales con claves falsas).
 - `python tools/crear_logo.py`: regenera icon.png y fanart.jpg.

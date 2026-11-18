@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Botón «Saltar intro» de Palantix: esquina inferior derecha, encima del vídeo, sin tapar nada más -->
+<window>
+    <defaultcontrol always="true">3001</defaultcontrol>
+    <animation effect="fade" start="0" end="100" time="250">WindowOpen</animation>
+    <animation effect="fade" start="100" end="0" time="200">WindowClose</animation>
+    <controls>
+        <control type="button" id="3001">
+            <left>1560</left>
+            <top>890</top>
+            <width>300</width>
+            <height>84</height>
+            <label>Saltar intro   ▶▶</label>
+            <font>font13</font>
+            <textcolor>FFFFFFFF</textcolor>
+            <focusedcolor>FFFFFFFF</focusedcolor>
+            <align>center</align>
+            <aligny>center</aligny>
+            <texturefocus border="20" colordiffuse="FF14A9FF">palantix-boton.png</texturefocus>
+            <texturenofocus border="20" colordiffuse="E01B1F4B">palantix-boton.png</texturenofocus>
+            <animation effect="zoom" start="96" end="100" center="auto" time="200">Focus</animation>
+        </control>
+    </controls>
+</window>

@@ -350,8 +350,116 @@ class Premiumize(Servicio):
                                  time.strftime(" · premium hasta el %d-%m-%Y", time.localtime(hasta)) if hasta else "")
 
 
+# ---------------------------------------------------------------------- TorBox
+def _multipart(campos):
+    """Cuerpo multipart/form-data mínimo (TorBox pide formulario para crear descargas)."""
+    limite = "----palantix%d" % int(time.time() * 1000)
+    partes = []
+    for k, v in campos.items():
+        partes.append('--%s\r\nContent-Disposition: form-data; name="%s"\r\n\r\n%s\r\n' % (limite, k, v))
+    partes.append("--%s--\r\n" % limite)
+    return "".join(partes).encode("utf-8"), "multipart/form-data; boundary=" + limite
+
+
+class TorBox(Servicio):
+    """API v1 con la clave de la cuenta (torbox.app/settings) por cabecera Bearer."""
+    id, nombre = "tb", "TorBox"
+    tipo_vinculo = "clave"
+    API = "https://api.torbox.app/v1/api"
+
+    def vinculado(self):
+        return bool(self.aj.get("tb_apikey"))
+
+    def _api(self, ruta, params=None, formulario=None):
+        url = self.API + ruta + (("?" + urlencode(params)) if params else "")
+        cab = {"User-Agent": AGENTE, "Accept": "application/json", "Authorization": "Bearer " + self.aj.get("tb_apikey")}
+        datos = None
+        if formulario is not None:
+            datos, cab["Content-Type"] = _multipart(formulario)
+        req = urllib.request.Request(url, data=datos, headers=cab, method="POST" if datos else "GET")
+        try:
+            with urllib.request.urlopen(req, timeout=25) as r:
+                resp = json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            try:
+                resp = json.loads(e.read().decode("utf-8"))
+            except ValueError:
+                raise DebridError("TorBox respondió %d" % e.code)
+        if not resp.get("success"):
+            raise DebridError("TorBox: %s" % (resp.get("detail") or resp.get("error") or "error"))
+        return resp.get("data")
+
+    def admite(self, url):
+        if url.startswith("magnet:"):
+            return True
+
+        def obtener():
+            # lista pública: se pide SIN clave (con una clave caducada TorBox la rechaza)
+            cod, r = _peticion(self.API + "/webdl/hosters")
+            doms = set()
+            for h in (r.get("data") if isinstance(r, dict) else None) or []:
+                for d in (h.get("domains") or []) + ([h["domain"]] if h.get("domain") else []):
+                    doms.add(d.lower())
+            return sorted(doms)
+        return _host_en(url, set(_cache_json(self.cache_dir, "tb_dominios.json", 86400, obtener)))
+
+    def _elegir(self, ficheros, elegir):
+        videos = solo_videos([(f.get("name") or f.get("short_name") or "", int(f.get("size") or 0), f.get("id"))
+                              for f in ficheros or []])
+        if not videos:
+            raise DebridError("No hay vídeos en la descarga de TorBox")
+        n = 0 if len(videos) == 1 else elegir(videos)
+        if n < 0:
+            raise DebridError("Cancelado")
+        return videos[n][2]
+
+    def resolver(self, url, elegir=lambda v: 0, cancelado=lambda: False):
+        clave = self.aj.get("tb_apikey")
+        if url.startswith("magnet:"):
+            creado = self._api("/torrents/createtorrent", formulario={"magnet": url, "seed": "1"}) or {}
+            tid = creado.get("torrent_id") or creado.get("id")
+            info = self._api("/torrents/mylist", {"id": tid, "bypass_cache": "true"}) or {}
+            if not (info.get("download_finished") or info.get("download_present")):
+                raise NoListo("El magnet se está descargando en TorBox (%d%%); prueba más tarde"
+                              % int(float(info.get("progress") or 0) * 100))
+            fid = self._elegir(info.get("files"), elegir)
+            return self._api("/torrents/requestdl", {"token": clave, "torrent_id": tid, "file_id": fid})
+        creado = self._api("/webdl/createwebdownload", formulario={"link": url}) or {}
+        wid = creado.get("webdownload_id") or creado.get("id")
+        fin = time.time() + 20
+        while True:
+            info = self._api("/webdl/mylist", {"id": wid, "bypass_cache": "true"}) or {}
+            if info.get("download_finished") or info.get("download_present"):
+                break
+            if time.time() > fin or cancelado():
+                raise NoListo("TorBox aún está preparando el enlace; prueba en un momento")
+            self.espera(3)
+        fid = self._elegir(info.get("files"), elegir)
+        return self._api("/webdl/requestdl", {"token": clave, "web_id": wid, "file_id": fid})
+
+    def _yo(self):
+        return self._api("/user/me") or {}
+
+    def dias_restantes(self):
+        hasta = self._yo().get("premium_expires_at") or ""
+        try:
+            fin = time.mktime(time.strptime(hasta[:19], "%Y-%m-%dT%H:%M:%S"))
+        except ValueError:
+            return None
+        return max(0, int((fin - time.time()) // 86400))
+
+    def cuenta(self):
+        u = self._yo()
+        return "%s · plan %s%s" % (u.get("email", "?"), u.get("plan", "?"),
+                                   (" hasta el %s" % fecha_iso_es(u["premium_expires_at"])) if u.get("premium_expires_at") else "")
+
+
+def fecha_iso_es(iso):
+    return "%s-%s-%s" % (iso[8:10], iso[5:7], iso[0:4]) if iso and len(iso) >= 10 else iso
+
+
 # ---------------------------------------------------------------------- centro
-SERVICIOS = [AllDebridServicio, RealDebrid, Premiumize]
+SERVICIOS = [AllDebridServicio, RealDebrid, Premiumize, TorBox]
 
 
 def activos(ajustes, **kw):

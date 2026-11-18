@@ -18,10 +18,19 @@
         <setting id="calidad_max" type="enum" label="Calidad máxima (baja si tu conexión es lenta)" values="4K|1080p|720p" default="0"/>
         <setting id="autoplay" type="bool" label="Reproducción automática (elige la mejor fuente sin preguntar)" default="false"/>
         <setting type="lsep" label="Series"/>
+        <setting id="intro_activo" type="bool" label="Botón «Saltar intro» (capítulos del vídeo y lo que aprende de ti)" default="true"/>
         <setting id="siguiente_activo" type="bool" label="Ofrecer el siguiente capítulo al acabar" default="true"/>
         <setting id="aviso_novedades" type="bool" label="Avisarme en la tele cuando salga un capítulo nuevo" default="true"/>
         <setting id="ocultar_al_dia" type="bool" label="En «Seguir viendo», ocultar las series que tengo al día" default="true"/>
         <setting id="siguiente_seg" type="slider" label="Avisar cuando falten (segundos)" default="30" range="10,5,120" option="int"/>
+    </category>
+    <category label="Subtítulos">
+        <setting id="subs_modo" type="enum" label="Poner subtítulos automáticamente" values="Nunca|Si el audio no está en mi idioma|Siempre" default="1"/>
+        <setting id="subs_idiomas" type="text" label="Idiomas (códigos separados por comas)" default="es"/>
+        <setting type="lsep" label="OpenSubtitles (clave gratuita en opensubtitles.com > API consumers)"/>
+        <setting id="os_apikey" type="text" label="Clave de la API" default=""/>
+        <setting id="os_usuario" type="text" label="Usuario (opcional, da más descargas al día)" default=""/>
+        <setting id="os_clave" type="text" label="Contraseña" default="" option="hidden"/>
     </category>
     <category label="Mis listas">
         <setting id="lista_1" type="text" label="Lista 1 (enlace http/https o ruta a fichero JSON/M3U)" default=""/>
@@ -52,6 +61,24 @@
         <setting type="action" label="Vincular pegando la clave de la API" action="RunPlugin(plugin://plugin.video.palantix/?accion=vincular&amp;s=pm)"/>
         <setting type="action" label="Ver mi cuenta" action="RunPlugin(plugin://plugin.video.palantix/?accion=cuenta&amp;s=pm)"/>
         <setting id="pm_apikey" type="text" label="" default="" visible="false"/>
+        <setting type="lsep" label="TorBox"/>
+        <setting id="tb_activo" type="bool" label="Usar TorBox" default="false"/>
+        <setting type="action" label="Vincular pegando la clave de la API" action="RunPlugin(plugin://plugin.video.palantix/?accion=vincular&amp;s=tb)"/>
+        <setting type="action" label="Ver mi cuenta" action="RunPlugin(plugin://plugin.video.palantix/?accion=cuenta&amp;s=tb)"/>
+        <setting id="tb_apikey" type="text" label="" default="" visible="false"/>
+    </category>
+    <category label="Trakt">
+        <setting id="trakt_activo" type="bool" label="Usar Trakt (visto automático, pendientes y listas)" default="false"/>
+        <setting type="lsep" label="1) Crea tu app en trakt.tv/oauth/applications · redirect: urn:ietf:wg:oauth:2.0:oob"/>
+        <setting id="trakt_client_id" type="text" label="Client ID" default=""/>
+        <setting id="trakt_client_secret" type="text" label="Client Secret" default="" option="hidden"/>
+        <setting type="action" label="2) Vincular con un código en pantalla" action="RunPlugin(plugin://plugin.video.palantix/?accion=vincular&amp;s=trakt)"/>
+        <setting type="action" label="Ver mi cuenta" action="RunPlugin(plugin://plugin.video.palantix/?accion=cuenta&amp;s=trakt)"/>
+        <setting id="trakt_listas_auto" type="bool" label="Añadir mis listas personales al menú principal" default="true"/>
+        <setting id="trakt_valorar" type="enum" label="Preguntar qué te ha parecido al terminar" values="Nunca|A veces|Siempre" default="1"/>
+        <setting id="trakt_token" type="text" label="" default="" visible="false"/>
+        <setting id="trakt_refresh" type="text" label="" default="" visible="false"/>
+        <setting id="trakt_caduca" type="text" label="" default="" visible="false"/>
     </category>
     <category label="Fuentes">
         <setting id="prov_archive_org" type="bool" label="Internet Archive (dominio público)" default="true"/>
