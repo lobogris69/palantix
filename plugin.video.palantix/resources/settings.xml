@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<settings>
+    <category label="General">
+        <setting id="tmdb_key" type="text" label="Clave de la API de TMDB (gratis en themoviedb.org)" default=""/>
+        <setting id="idioma" type="text" label="Idioma del catálogo" default="es-ES"/>
+        <setting id="region" type="text" label="Región" default="ES"/>
+    </category>
+    <category label="Catálogo">
+        <setting id="orden_listas" type="enum" label="Orden de géneros y años" values="Más populares|Más recientes|Mejor valoradas|Alfabético" default="0"/>
+        <setting id="paginas" type="enum" label="Elementos por pantalla" values="20|40|60" default="0"/>
+        <setting id="recordar_busquedas" type="bool" label="Recordar las últimas búsquedas" default="true"/>
+        <setting id="mostrar_etiquetas" type="bool" label="Mostrar idioma y calidad en los títulos" default="true"/>
+        <setting id="color_etiquetas" type="enum" label="Color de las etiquetas" values="Sin color|Dorado|Azul|Verde|Naranja|Violeta|Blanco" default="1"/>
+    </category>
+    <category label="Reproducción">
+        <setting id="idioma_pref" type="enum" label="Idioma preferido" values="Castellano|Latino|VOSE|Versión original|Me da igual" default="0"/>
+        <setting id="solo_idioma" type="bool" label="Ocultar fuentes en otros idiomas" default="false"/>
+        <setting id="calidad_max" type="enum" label="Calidad máxima (baja si tu conexión es lenta)" values="4K|1080p|720p" default="0"/>
+        <setting id="autoplay" type="bool" label="Reproducción automática (elige la mejor fuente sin preguntar)" default="false"/>
+        <setting type="lsep" label="Series"/>
+        <setting id="siguiente_activo" type="bool" label="Ofrecer el siguiente capítulo al acabar" default="true"/>
+        <setting id="aviso_novedades" type="bool" label="Avisarme en la tele cuando salga un capítulo nuevo" default="true"/>
+        <setting id="ocultar_al_dia" type="bool" label="En «Seguir viendo», ocultar las series que tengo al día" default="true"/>
+        <setting id="siguiente_seg" type="slider" label="Avisar cuando falten (segundos)" default="30" range="10,5,120" option="int"/>
+    </category>
+    <category label="Mis listas">
+        <setting id="lista_1" type="text" label="Lista 1 (enlace http/https o ruta a fichero JSON/M3U)" default=""/>
+        <setting id="lista_2" type="text" label="Lista 2" default=""/>
+        <setting id="lista_3" type="text" label="Lista 3" default=""/>
+        <setting id="cache_min" type="number" label="Refrescar listas cada (minutos)" default="60"/>
+    </category>
+    <category label="Servicios Debrid">
+        <setting id="aviso_caducidad" type="bool" label="Avisar cuando falten 7 días o menos para que caduque la cuenta" default="true"/>
+        <setting id="ultimo_aviso" type="text" label="" default="" visible="false"/>
+        <setting type="lsep" label="Se usan en este orden para alojamientos y magnets; si uno falla, se prueba el siguiente"/>
+        <setting type="lsep" label="AllDebrid"/>
+        <setting id="ad_activo" type="bool" label="Usar AllDebrid" default="false"/>
+        <setting type="action" label="Vincular con un código en pantalla" action="RunPlugin(plugin://plugin.video.palantix/?accion=vincular&amp;s=ad)"/>
+        <setting type="action" label="Ver mi cuenta" action="RunPlugin(plugin://plugin.video.palantix/?accion=cuenta&amp;s=ad)"/>
+        <setting id="ad_apikey" type="text" label="" default="" visible="false"/>
+        <setting type="lsep" label="Real-Debrid"/>
+        <setting id="rd_activo" type="bool" label="Usar Real-Debrid" default="false"/>
+        <setting type="action" label="Vincular con un código en pantalla" action="RunPlugin(plugin://plugin.video.palantix/?accion=vincular&amp;s=rd)"/>
+        <setting type="action" label="Ver mi cuenta" action="RunPlugin(plugin://plugin.video.palantix/?accion=cuenta&amp;s=rd)"/>
+        <setting id="rd_token" type="text" label="" default="" visible="false"/>
+        <setting id="rd_refresh" type="text" label="" default="" visible="false"/>
+        <setting id="rd_client_id" type="text" label="" default="" visible="false"/>
+        <setting id="rd_client_secret" type="text" label="" default="" visible="false"/>
+        <setting id="rd_caduca" type="text" label="" default="" visible="false"/>
+        <setting type="lsep" label="Premiumize"/>
+        <setting id="pm_activo" type="bool" label="Usar Premiumize" default="false"/>
+        <setting type="action" label="Vincular pegando la clave de la API" action="RunPlugin(plugin://plugin.video.palantix/?accion=vincular&amp;s=pm)"/>
+        <setting type="action" label="Ver mi cuenta" action="RunPlugin(plugin://plugin.video.palantix/?accion=cuenta&amp;s=pm)"/>
+        <setting id="pm_apikey" type="text" label="" default="" visible="false"/>
+    </category>
+    <category label="Fuentes">
+        <setting id="prov_archive_org" type="bool" label="Internet Archive (dominio público)" default="true"/>
+        <setting id="prov_listas" type="bool" label="Buscar también en Mis listas" default="true"/>
+    </category>
+</settings>

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addons>
+<addon id="plugin.video.palantix" name="Palantix" version="0.2.0" provider-name="Palantix">
+    <requires>
+        <import addon="xbmc.python" version="3.0.0"/>
+    </requires>
+    <extension point="xbmc.python.pluginsource" library="main.py">
+        <provides>video</provides>
+    </extension>
+    <extension point="xbmc.service" library="service.py"/>
+    <extension point="xbmc.addon.metadata">
+        <summary lang="es_ES">Catálogo de películas con fuentes enchufables</summary>
+        <description lang="es_ES">Catálogo de TMDB (carátulas, sinopsis, géneros, búsqueda) y un sistema de proveedores de vídeo intercambiables. Incluye Internet Archive (dominio público).</description>
+        <platform>all</platform>
+        <license>MIT</license>
+        <assets>
+            <icon>icon.png</icon>
+            <fanart>fanart.jpg</fanart>
+        </assets>
+    </extension>
+</addon>
+<addon id="repository.palantix" name="Repositorio Palantix" version="1.0.0" provider-name="Palantix">
+    <extension point="xbmc.addon.repository" name="Repositorio Palantix">
+        <dir>
+            <info compressed="false">https://lobogris69.github.io/palantix/addons.xml</info>
+            <checksum>https://lobogris69.github.io/palantix/addons.xml.md5</checksum>
+            <datadir zip="true">https://lobogris69.github.io/palantix/</datadir>
+        </dir>
+    </extension>
+    <extension point="xbmc.addon.metadata">
+        <summary lang="es_ES">Repositorio del addon Palantix</summary>
+        <description lang="es_ES">Instala Palantix y lo mantiene actualizado.</description>
+        <platform>all</platform>
+        <assets>
+            <icon>icon.png</icon>
+            <fanart>fanart.jpg</fanart>
+        </assets>
+    </extension>
+</addon>
+</addons>
