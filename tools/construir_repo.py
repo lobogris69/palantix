@@ -113,10 +113,12 @@ def main():
     # el zip del repositorio también en la raíz: es el que se instala a mano la primera vez
     shutil.copy(comprimir(carpetas[1], os.path.join(SALIDA, "repository.palantix")), SALIDA)
     addons_xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<addons>\n%s\n</addons>\n' % "\n".join(bloques)
-    with open(os.path.join(SALIDA, "addons.xml"), "w", encoding="utf-8") as f:
-        f.write(addons_xml)
-    with open(os.path.join(SALIDA, "addons.xml.md5"), "w") as f:
-        f.write(hashlib.md5(addons_xml.encode("utf-8")).hexdigest())
+    # en binario: la huella se calcula sobre los MISMOS bytes que descargará Kodi (sin saltos de Windows)
+    datos = addons_xml.encode("utf-8")
+    with open(os.path.join(SALIDA, "addons.xml"), "wb") as f:
+        f.write(datos)
+    with open(os.path.join(SALIDA, "addons.xml.md5"), "wb") as f:
+        f.write(hashlib.md5(datos).hexdigest().encode())
     open(os.path.join(SALIDA, ".nojekyll"), "w").close()
     for base, dirs, _ in os.walk(SALIDA):
         indice(base, "Palantix" if base == SALIDA else os.path.basename(base))
