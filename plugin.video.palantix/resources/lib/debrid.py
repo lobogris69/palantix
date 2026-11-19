@@ -23,8 +23,25 @@ class DebridError(Exception):
     pass
 
 
+class SinServicio(DebridError):
+    """No hay un servicio activo y vinculado que acepte la fuente."""
+
+
 class NoListo(Exception):
     """El magnet aún no está descargado en el servicio: queda descargándose para más tarde."""
+
+
+def mensaje_privado(error):
+    """Usa mensajes locales para evitar mostrar datos devueltos por un servicio."""
+    if isinstance(error, SinServicio):
+        return "Activa y vincula AllDebrid u otro servicio en Ajustes → Servicios Debrid."
+    if isinstance(error, NoListo):
+        return "Debrid está preparando la descarga. Prueba otra fuente o vuelve más tarde."
+    if isinstance(error.__cause__, ad_mod.AllDebridError):
+        mensaje = ad_mod.MENSAJES.get(error.__cause__.codigo)
+        if mensaje:
+            return mensaje
+    return "Debrid no pudo preparar esta fuente. Comprueba tu cuenta o prueba otra fuente."
 
 
 def _peticion(url, datos=None, cabeceras=None, metodo=None):
@@ -121,7 +138,10 @@ class AllDebridServicio(Servicio):
         return bool(self.aj.get("ad_apikey"))
 
     def admite(self, url):
-        return self._cli().necesita(url, self._cli().dominios(self.cache_dir))
+        if url.startswith("magnet:"):
+            return True
+        cliente = self._cli()
+        return cliente.necesita(url, cliente.dominios(self.cache_dir))
 
     def resolver(self, url, elegir=lambda v: 0, cancelado=lambda: False):
         c = self._cli()
@@ -138,7 +158,7 @@ class AllDebridServicio(Servicio):
         except ad_mod.NoListo as e:
             raise NoListo(str(e))
         except ad_mod.AllDebridError as e:
-            raise DebridError(str(e))
+            raise DebridError(str(e)) from e
 
     def iniciar_pin(self):
         d = self._cli().pin_get()
@@ -493,7 +513,7 @@ def resolver(url, servicios, elegir=lambda v: 0, cancelado=lambda: False, log=pr
     if ultimo:
         raise ultimo
     if url.startswith("magnet:") and not alguno:
-        raise DebridError("Para magnets activa y vincula un servicio Debrid en Ajustes")
+        raise SinServicio("Para magnets activa y vincula un servicio Debrid en Ajustes")
     return url
 
 

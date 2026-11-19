@@ -253,7 +253,7 @@ def resolver(enlace, avisar=True, elegir=_elegir_fichero, privada=False):
         if not privada:
             log("Debrid: %s" % e)
         if avisar:
-            aviso("No se pudo resolver la fuente de Stremio" if privada else str(e))
+            aviso(debrid.mensaje_privado(e) if privada else str(e))
         return None
     except Exception as e:
         if not privada:
