@@ -1,0 +1,57 @@
+{
+  "nombre": "Cine libre y documentales",
+  "peliculas": [
+    {
+      "titulo": "Sintel",
+      "anio": 2010,
+      "imdb_id": "tt1727587",
+      "url": "https://download.blender.org/durian/movies/Sintel.2010.1080p.mkv",
+      "calidad": "1080p · MKV",
+      "grupo": "Cortos de animación",
+      "sinopsis": "Una joven llamada Sintel busca al pequeño dragón con el que entabló amistad.",
+      "autor": "Blender Foundation",
+      "licencia": "CC BY 3.0",
+      "licencia_url": "https://creativecommons.org/licenses/by/3.0/",
+      "ficha_origen": "https://studio.blender.org/projects/sintel/55f338f92beb3300c4ff99e9/?asset=1161"
+    },
+    {
+      "titulo": "Cosmos Laundromat",
+      "titulo_original": "Cosmos Laundromat: First Cycle",
+      "anio": 2015,
+      "url": "https://upload.wikimedia.org/wikipedia/commons/3/36/Cosmos_Laundromat_-_First_Cycle_-_Official_Blender_Foundation_release.webm",
+      "calidad": "2048 × 858 · WebM",
+      "grupo": "Cortos de animación",
+      "sinopsis": "Una oveja llamada Franck conoce a un vendedor que le ofrece una vida distinta.",
+      "autor": "Blender Foundation",
+      "licencia": "CC BY-SA 3.0",
+      "licencia_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "ficha_origen": "https://commons.wikimedia.org/wiki/File:Cosmos_Laundromat_-_First_Cycle_-_Official_Blender_Foundation_release.webm"
+    },
+    {
+      "titulo": "Tears of Steel",
+      "anio": 2012,
+      "url": "https://archive.org/download/Tears-of-Steel/tears_of_steel_1080p.mkv",
+      "calidad": "1080p · MKV",
+      "grupo": "Ciencia ficción",
+      "sinopsis": "En un Ámsterdam futurista, un grupo intenta revivir un encuentro del pasado para detener una amenaza robótica.",
+      "autor": "Blender Foundation · Dirección de Ian Hubert",
+      "licencia": "CC BY 3.0",
+      "licencia_url": "https://creativecommons.org/licenses/by/3.0/",
+      "ficha_origen": "https://archive.org/details/Tears-of-Steel"
+    },
+    {
+      "titulo": "The Eagle Has Landed",
+      "titulo_original": "The Eagle Has Landed - The Flight of Apollo 11",
+      "anio": 1969,
+      "idioma": "VO",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/9/98/The_Eagle_Has_Landed_-_The_Flight_of_Apollo_11.webm",
+      "calidad": "480p · WebM",
+      "grupo": "Documentales",
+      "sinopsis": "Documental de la NASA sobre el viaje del Apolo 11 y el primer alunizaje tripulado.",
+      "autor": "NASA",
+      "licencia": "Dominio público en EE. UU.",
+      "licencia_url": "https://creativecommons.org/publicdomain/mark/1.0/",
+      "ficha_origen": "https://commons.wikimedia.org/wiki/File:The_Eagle_Has_Landed_-_The_Flight_of_Apollo_11.webm"
+    }
+  ]
+}

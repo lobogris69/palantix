@@ -24,10 +24,11 @@ class ListaURL(Proveedor):
         titulos = {_n(peli.titulo), _n(peli.titulo_original)} - {""}
         fuentes = []
         for n, origen in enumerate(self.origenes, 1):
+            proveedor = self.nombre if self.id != "listas" else "Lista %d" % n
             try:
                 items = listas.cargar(origen, self.cache_dir, self.ttl)
             except Exception as e:
-                self.fallo("Lista %d" % n)
+                self.fallo(proveedor)
                 self.log("[Palantix] Lista %d ilegible: %s" % (n, type(e).__name__))
                 continue
             for it in items:
@@ -38,7 +39,7 @@ class ListaURL(Proveedor):
                         it["titulo"],
                         (" %dx%02d" % (it["temporada"], it["episodio"])) if it["tipo"] == "episodio" else "",
                         (" · " + it["calidad"]) if it["calidad"] else ""),
-                    url=it["url"], calidad=it["calidad"], idioma=it["idioma"], proveedor="Lista %d" % n,
+                    url=it["url"], calidad=it["calidad"], idioma=it["idioma"], proveedor=proveedor,
                 ))
         return fuentes
 

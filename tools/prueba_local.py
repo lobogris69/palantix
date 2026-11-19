@@ -152,7 +152,31 @@ def comprobar(nombre, cond):
 from urllib.parse import urlencode  # noqa: E402
 
 r = abrir("")
-comprobar("menú principal: Películas, Series, Continuar viendo, Seguimiento, Favoritas, Listas, Ajustes, Actualizar", len(r["items"]) == 8)
+comprobar("menú principal incluye Cine libre y documentales",
+          any(i[0] == "Cine libre y documentales" for i in r["items"]))
+comprobar("menú principal incluye Deportes", any(i[0] == "Deportes" for i in r["items"]))
+r = abrir("?accion=deportes")
+comprobar("Deportes ofrece agenda, canales y fuentes",
+          [i[0] for i in r["items"]] == ["Hoy", "Canales en directo", "Mis fuentes"])
+r = abrir("?accion=deportes_canales")
+comprobar("Deportes incorpora Teledeporte", any(i[0] == "Teledeporte" for i in r["items"]))
+cid = "a" * 40
+consulta_ace = "?" + urlencode({"accion": "deportes_play", "u": "acestream://" + cid})
+r = abrir(consulta_ace)
+comprobar("Ace Stream sin Horus termina con un fallo controlado", r["resuelto"] == (False, ""))
+visibilidad_original = sys.modules["xbmc"].getCondVisibility
+try:
+    sys.modules["xbmc"].getCondVisibility = lambda c: c == "System.HasAddon(script.module.horus)"
+    r = abrir(consulta_ace)
+    comprobar("Ace Stream delega en Horus",
+              r["resuelto"] == (True, "plugin://script.module.horus?action=play&id=acestream%3A%2F%2F" + cid))
+finally:
+    sys.modules["xbmc"].getCondVisibility = visibilidad_original
+r = abrir("?accion=cine_libre")
+comprobar("cine libre: muestra categorías", any(i[0] == "Documentales" for i in r["items"]))
+r = abrir("?accion=cine_libre&g=Documentales")
+comprobar("cine libre: muestra el documental con reproducción directa",
+          any("The Eagle Has Landed" in i[0] and "accion=reproducir_directo" in i[1] for i in r["items"]))
 
 r = abrir("?accion=listas")
 etiquetas_ = [i[0] for i in r["items"]]
