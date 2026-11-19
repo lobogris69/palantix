@@ -1,0 +1,17 @@
+#EXTM3U
+#EXTINF:-1 group-title="4K HDR",Chimera · prueba 4K HDR 24 fps (Netflix Open Content, CC BY 4.0) (2019)
+http://download.opencontent.netflix.com.s3.amazonaws.com/Chimera/Chimera_DCI4k2398p_HDR_P3PQ.mp4
+#EXTINF:-1 group-title="Formatos",Sparks · prueba AV1 1080p 60 fps (Netflix Open Content, CC BY 4.0) (2019)
+http://download.opencontent.netflix.com.s3.amazonaws.com/AV1/Sparks/Sparks-5994fps-AV1-10bit-1920x1080-2194kbps.mp4
+#EXTINF:-1 tvg-logo="https://archive.org/services/img/BigBuckBunnyFULLHD60FPS" group-title="1080p",Big Buck Bunny · 1080p 60 fps (Blender, CC BY 3.0) (2008)
+https://archive.org/download/BigBuckBunnyFULLHD60FPS/Big%20Buck%20Bunny%20-%20FULL%20HD%2060FPS.mp4
+#EXTINF:-1 tvg-logo="https://archive.org/services/img/Tears-of-Steel" group-title="1080p",Tears of Steel · 1080p (Blender, CC BY 3.0) (2012)
+https://archive.org/download/Tears-of-Steel/tears_of_steel_1080p.mkv
+#EXTINF:-1 tvg-logo="https://archive.org/services/img/sintel.-2010.1080p" group-title="1080p",Sintel · 1080p (Blender, CC BY 3.0) (2010)
+https://download.blender.org/durian/movies/Sintel.2010.1080p.mkv
+#EXTINF:-1 tvg-logo="https://archive.org/services/img/CosmosLaundromatFirstCycle" group-title="1080p",Cosmos Laundromat · 1080p (Blender, CC BY 4.0) (2015)
+https://archive.org/download/CosmosLaundromatFirstCycle/Cosmos%20Laundromat%20-%20First%20Cycle%20%281080p%29.mp4
+#EXTINF:-1 tvg-logo="https://archive.org/services/img/TheGeneral720p1926" group-title="Clásicos (dominio público)",El maquinista de la General · 720p (1926)
+https://archive.org/download/TheGeneral720p1926/TheGeneral720p.mp4
+#EXTINF:-1 tvg-logo="https://archive.org/services/img/night_of_the_living_dead_dvd" group-title="Clásicos (dominio público)",La noche de los muertos vivientes (1968)
+https://archive.org/download/night_of_the_living_dead_dvd/Night.mp4

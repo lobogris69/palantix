@@ -135,6 +135,9 @@ def main():
     with open(os.path.join(SALIDA, "addons.xml.md5"), "wb") as f:
         f.write(hashlib.md5(datos).hexdigest().encode())
     open(os.path.join(SALIDA, ".nojekyll"), "w").close()
+    # lista pública de vídeos libres para probar la imagen de la tele (Mis listas > Añadir una lista)
+    os.makedirs(os.path.join(SALIDA, "pruebas"), exist_ok=True)
+    shutil.copy(os.path.join(RAIZ, "tools", "pruebas-tv.m3u"), os.path.join(SALIDA, "pruebas", "pruebas-tv.m3u"))
     for base, dirs, _ in os.walk(SALIDA):
         indice(base, "Palantix" if base == SALIDA else os.path.basename(base))
     print("Repositorio listo en", SALIDA)
