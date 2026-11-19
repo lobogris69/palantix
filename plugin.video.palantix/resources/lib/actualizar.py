@@ -1,13 +1,10 @@
-"""Actualizaciones fáciles: Palantix mira en su repositorio si hay versión nueva y pide a Kodi que la instale.
-
-Kodi solo refresca los repositorios una vez al día; con UpdateAddonRepos lo hace al momento y,
-como las actualizaciones automáticas de Kodi vienen activadas, la versión nueva se instala sola.
-"""
+"""Consulta la versión publicada y solicita a Kodi refrescar sus repositorios."""
 import re
 import urllib.request
 
 REPO = "https://lobogris69.github.io/palantix/addons.xml"
 ID = "plugin.video.palantix"
+ID_REPOSITORIO = "repository.palantix"
 
 
 def a_tupla(version):
@@ -28,8 +25,10 @@ def hay_nueva(local, remota):
 
 
 def pedir_a_kodi(log=print):
-    """Refresca los repositorios ya (y Kodi instala la actualización si tiene las automáticas activadas)."""
+    """Solicita una búsqueda en Kodi y devuelve si el repositorio está habilitado."""
     import xbmc
+    if not xbmc.getCondVisibility("System.AddonIsEnabled(%s)" % ID_REPOSITORIO):
+        return False
     xbmc.executebuiltin("UpdateAddonRepos")
-    xbmc.executebuiltin("UpdateLocalAddons")
-    log("[Palantix] pedido a Kodi que busque actualizaciones")
+    log("[Palantix] pedido a Kodi que refresque los repositorios")
+    return True
