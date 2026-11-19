@@ -18,7 +18,7 @@ TEXTO2 = "FFB8BCC8"
 
 # (id, forma): «ancha» = miniatura 16:9 con barra de progreso; «poster» = carátula 2:3
 FILAS = [(101, "ancha"), (102, "ancha"), (103, "poster"), (104, "poster"), (105, "poster"),
-         (106, "poster"), (107, "poster"), (108, "poster"), (109, "poster"), (110, "poster")]
+         (106, "poster"), (107, "poster"), (108, "poster"), (109, "poster"), (110, "poster"), (111, "poster")]
 MENU = 200
 TAM = {"poster": (196, 294), "ancha": (352, 198)}
 

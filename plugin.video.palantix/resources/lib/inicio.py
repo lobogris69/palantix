@@ -20,8 +20,9 @@ FILAS = [
     (106, "Las mejor valoradas"),
     (107, "Mi lista"),
     (108, "Novedades en streaming"),
+    (111, "Capítulos recientes"),
 ]
-TODAS = list(range(101, 111))  # ids de las filas del XML (101-102 anchas, 103-110 carátulas)
+TODAS = list(range(101, 112))  # ids de las filas del XML (101-102 anchas, 103-111 carátulas)
 
 # Pestañas: (fila, título, (qué pedir a TMDB, argumento))
 PESTANAS = {
@@ -32,7 +33,8 @@ PESTANAS = {
     "series": [(103, "Series del momento", ("lista", "s_tendencias")), (104, "Series populares", ("lista", "s_populares")),
                (105, "Las mejor valoradas", ("lista", "s_mejor_valoradas")), (106, "Drama", ("s_genero", 18)),
                (107, "Comedia", ("s_genero", 35)), (108, "Crimen", ("s_genero", 80)), (109, "Animación", ("s_genero", 16)),
-               (110, "Documentales", ("s_genero", 99))],
+               (110, "Documentales", ("s_genero", 99)),
+               (111, "Capítulos recientes", ("lista", "s_capitulos_recientes"))],
 }
 NOMBRE_PESTANA = {"inicio": "", "peliculas": "Películas", "series": "Series"}
 CACHE_SEG = 3600
@@ -83,12 +85,13 @@ def _tmdb_cache(perfil, t):
         with open(ruta, encoding="utf-8") as f:
             c = json.load(f)
         if (time.time() - c.get("fecha", 0) < CACHE_SEG and c.get("idioma") == t.idioma
-                and c.get("region") == region and "streaming" in c["datos"]):
+                and c.get("region") == region and "capitulos_recientes" in c["datos"]):
             return c["datos"]
     except (OSError, ValueError, KeyError):
         pass
     tareas = {"tendencias": t.tendencias, "series": t.s_tendencias, "cines": t.en_cines,
-              "valoradas": t.mejor_valoradas, "streaming": t.novedades_streaming}
+              "valoradas": t.mejor_valoradas, "streaming": t.novedades_streaming,
+              "capitulos_recientes": t.s_capitulos_recientes}
     with ThreadPoolExecutor(max_workers=len(tareas)) as pool:
         futuros = {k: pool.submit(f, 1) for k, f in tareas.items()}
     datos = {}
@@ -122,7 +125,9 @@ def datos_pestana(perfil, t, url, pestana, filtrar_peliculas=lambda pelis: pelis
         with open(ruta, encoding="utf-8") as f:
             c = json.load(f)
         if time.time() - c.get("fecha", 0) < CACHE_SEG and c.get("idioma") == t.idioma:
-            crudo = {int(k): v for k, v in c["datos"].items()}
+            cache = {int(k): v for k, v in c["datos"].items()}
+            if all(fid in cache for fid, _, _ in filas):
+                crudo = cache
     except (OSError, ValueError, KeyError):
         pass
     if crudo is None:
@@ -201,6 +206,7 @@ def datos_filas(perfil, t, url, favoritas=(), filtrar_peliculas=lambda pelis: pe
     # 107 Mi lista (favoritas)
     filas[107] = [elemento_pelicula(m, url) for m in favoritas if str(m["id"]) in visibles]
     filas[108] = [elemento_pelicula(m, url) for m in tm.get("streaming", []) if str(m["id"]) in visibles]
+    filas[111] = [elemento_serie(serie, url) for serie in tm.get("capitulos_recientes", [])]
     return filas
 
 

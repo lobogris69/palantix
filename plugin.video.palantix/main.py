@@ -490,6 +490,7 @@ def menu_peliculas():
 
 
 def menu_series():
+    carpeta("Capítulos recientes", url(accion="s_capitulos_recientes"))
     carpeta("Tendencias de la semana", url(accion="s_tendencias"))
     carpeta("Populares", url(accion="s_populares"))
     carpeta("Mejor valoradas", url(accion="s_mejor_valoradas"))
@@ -1330,7 +1331,7 @@ def con_tmdb(t, accion, page):
     vp = varias_paginas
     if accion in ("tendencias", "populares", "en_cines", "mejor_valoradas", "novedades_streaming"):
         listar(vp(getattr(t, accion), page), accion)
-    elif accion in ("s_tendencias", "s_populares", "s_mejor_valoradas"):
+    elif accion in ("s_tendencias", "s_populares", "s_mejor_valoradas", "s_capitulos_recientes"):
         listar_series(vp(getattr(t, accion), page), accion)
     elif accion == "anio":
         listar(vp(lambda n: t.por_anio(anio, n), page), "anio", a=anio)
