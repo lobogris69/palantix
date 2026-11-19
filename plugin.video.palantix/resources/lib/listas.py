@@ -111,6 +111,7 @@ def _normaliza_item(d):
         "autor": (d.get("autor") or "").strip(),
         "licencia": (d.get("licencia") or "").strip(),
         "licencia_url": (d.get("licencia_url") or "").strip(),
+        "inicio": d.get("inicio") or d.get("start") or "",
         "ficha_origen": (d.get("ficha_origen") or "").strip(),
     }
 

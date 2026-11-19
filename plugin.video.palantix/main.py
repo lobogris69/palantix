@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import time
+from datetime import datetime
 from urllib.parse import parse_qsl, urlencode
 
 import xbmc
@@ -11,7 +12,7 @@ import xbmcgui
 import xbmcplugin
 import xbmcvfs
 
-from resources.lib import disponibilidad, etiquetas, fuentes_catalogo, listas, preferencias_copia
+from resources.lib import deportes, disponibilidad, etiquetas, fuentes_catalogo, listas, preferencias_copia
 from resources.lib import actualizar, debrid, inicio, mislistas, novedades, progreso, seguimiento, subtitulos, trakt
 from resources.lib import tmdb as tmdb_mod
 from resources.lib.providers import Peli
@@ -474,6 +475,7 @@ def menu():
                 log("Trakt listas: %s" % e)
     carpeta("Mis favoritas", url(accion="favoritas"), "DefaultFavourites.png")
     carpeta(cine_libre.TITULO, url(accion="cine_libre"), "DefaultMovies.png")
+    carpeta("Deportes", url(accion="deportes"), "DefaultTVShows.png")
     carpeta("Mis listas", url(accion="listas"), "DefaultPlaylist.png")
     carpeta("Ajustes", url(accion="ajustes"), "DefaultAddonService.png")
     carpeta("Actualizar Palantix  " + color("(versión %s)" % ADDON.getAddonInfo("version"), GRIS),
@@ -869,6 +871,135 @@ def catalogo_cine_libre():
     xbmcplugin.setContent(HANDLE, "movies")
     xbmcplugin.addDirectoryItems(HANDLE, fichas, len(fichas))
     fin_listado("movies")
+
+
+def entrada_deporte(titulo, enlace, poster=""):
+    li = xbmcgui.ListItem(titulo)
+    li.setArt({"thumb": poster or LOGO, "fanart": FONDO})
+    li.setProperty("IsPlayable", "true")
+    xbmcplugin.addDirectoryItem(HANDLE, url(accion="deportes_play", u=enlace), li)
+
+
+def menu_deportes():
+    carpeta("Hoy", url(accion="deportes_hoy"))
+    carpeta("Canales en directo", url(accion="deportes_canales"), "DefaultTVShows.png")
+    carpeta("Mis fuentes", url(accion="deportes_fuentes"), "DefaultPlaylist.png")
+    return fin_listado()
+
+
+def canales_deportes():
+    for titulo, enlace in deportes.CANALES:
+        entrada_deporte(titulo, enlace)
+    return fin_listado()
+
+
+def perfil_deportes():
+    return os.path.join(PERFIL, "deportes")
+
+
+def fuentes_deportes():
+    carpeta("Añadir lista M3U o JSON", url(accion="deportes_anadir", tipo="lista"), "DefaultAddSource.png")
+    carpeta("Añadir enlace Ace Stream", url(accion="deportes_anadir", tipo="ace"), "DefaultAddSource.png")
+    carpeta("Configurar Ace Stream", url(accion="deportes_horus"), "DefaultAddonService.png")
+    for fuente in mislistas.leer(perfil_deportes()):
+        origen = fuente["origen"]
+        li = xbmcgui.ListItem(fuente["nombre"])
+        li.addContextMenuItems([("Quitar fuente", "RunPlugin(%s)" % url(accion="deportes_quitar", u=origen))])
+        if deportes.ace_id(origen):
+            li.setProperty("IsPlayable", "true")
+            xbmcplugin.addDirectoryItem(HANDLE, url(accion="deportes_play", u=origen), li)
+        else:
+            xbmcplugin.addDirectoryItem(HANDLE, url(accion="deportes_lista", u=origen), li, isFolder=True)
+    return fin_listado()
+
+
+def anadir_fuente_deportes():
+    es_ace = PARAMS.get("tipo") == "ace"
+    dialogo = xbmcgui.Dialog()
+    origen = (dialogo.input("Enlace o código Ace Stream" if es_ace else "URL de la lista M3U o JSON") or "").strip()
+    if not origen:
+        return
+    if es_ace:
+        cid = deportes.ace_id(origen)
+        if not cid:
+            return aviso("Introduce un enlace Ace Stream o un código de 40 caracteres")
+        origen = "acestream://" + cid
+    elif not deportes.es_web(origen):
+        return aviso("Introduce una dirección http o https")
+    sugerido = "Ace Stream" if es_ace else mislistas.nombre_por_defecto(origen)
+    nombre = dialogo.input("Nombre de la fuente", sugerido) or sugerido
+    if not mislistas.anadir(perfil_deportes(), nombre, origen):
+        return aviso("Esa fuente ya está añadida")
+    xbmc.executebuiltin("Container.Refresh")
+
+
+def quitar_fuente_deportes():
+    for i, fuente in enumerate(mislistas.leer(perfil_deportes())):
+        if fuente["origen"] == PARAMS.get("u"):
+            if xbmcgui.Dialog().yesno("Deportes", "¿Quitar «%s»?" % fuente["nombre"]):
+                mislistas.quitar(perfil_deportes(), i)
+                xbmc.executebuiltin("Container.Refresh")
+            return
+
+
+def listar_deportes(hoy=False):
+    fuentes = [f for f in mislistas.leer(perfil_deportes()) if deportes.es_web(f["origen"])]
+    if not hoy:
+        fuentes = [f for f in fuentes if f["origen"] == PARAMS.get("u")]
+    eventos = []
+    vistos = set()
+    fecha = datetime.now().date()
+    for fuente in fuentes:
+        try:
+            items = listas.cargar(fuente["origen"], CACHE, min(300, ttl_listas()))
+        except (OSError, ValueError, TypeError, AttributeError):
+            aviso("No se pudo leer la fuente «%s»" % fuente["nombre"])
+            continue
+        for item in items:
+            enlace = item["url"]
+            if not (deportes.ace_id(enlace) or deportes.es_web(enlace)):
+                continue
+            inicio = deportes.inicio_evento(item["inicio"])
+            if hoy and (inicio is None or inicio.date() != fecha):
+                continue
+            clave = (item["titulo"], deportes.ace_id(enlace) or enlace, inicio)
+            if clave not in vistos:
+                vistos.add(clave)
+                eventos.append((inicio, item))
+    for inicio, item in sorted(eventos, key=lambda evento: evento[0].timestamp() if evento[0] else float("inf")):
+        titulo = item["titulo"]
+        if inicio:
+            formato = "%H:%M" if hoy else "%d/%m %H:%M"
+            titulo = "%s · %s" % (inicio.strftime(formato), titulo)
+        if item["grupo"] != "Sin grupo":
+            titulo += " · " + item["grupo"]
+        entrada_deporte(titulo, item["url"], item["poster"])
+    if not eventos:
+        aviso("No hay eventos con fecha de hoy en tus listas" if hoy else "La lista no contiene enlaces compatibles")
+    return fin_listado()
+
+
+def horus_disponible():
+    if xbmc.getCondVisibility("System.HasAddon(%s)" % deportes.HORUS):
+        return True
+    xbmcgui.Dialog().ok("Ace Stream", "Instala y activa Horus en Kodi y configura el motor Ace Stream de tu dispositivo. "
+                        "Después puedes gestionar los enlaces y listas desde Deportes → Mis fuentes.")
+    return False
+
+
+def configurar_horus():
+    if horus_disponible():
+        xbmcaddon.Addon(deportes.HORUS).openSettings()
+
+
+def reproducir_deporte():
+    enlace = PARAMS.get("u", "")
+    horus = deportes.ruta_horus(enlace)
+    if horus:
+        ruta = horus if horus_disponible() else ""
+    else:
+        ruta = enlace if deportes.es_web(enlace) else ""
+    xbmcplugin.setResolvedUrl(HANDLE, bool(ruta), xbmcgui.ListItem(path=ruta))
 
 
 def mis_listas():
@@ -1322,6 +1453,15 @@ SIN_TMDB = {
     "fav_quitar": lambda: fav_cambiar(False),
     "listas": mis_listas,
     "cine_libre": catalogo_cine_libre,
+    "deportes": menu_deportes,
+    "deportes_canales": canales_deportes,
+    "deportes_fuentes": fuentes_deportes,
+    "deportes_anadir": anadir_fuente_deportes,
+    "deportes_quitar": quitar_fuente_deportes,
+    "deportes_horus": configurar_horus,
+    "deportes_hoy": lambda: listar_deportes(hoy=True),
+    "deportes_lista": listar_deportes,
+    "deportes_play": reproducir_deporte,
     "anios": lambda: anios(PARAMS["destino"]),
     "dejar_seguir": dejar_seguir,
     "marcar_capitulo": marcar_capitulo,

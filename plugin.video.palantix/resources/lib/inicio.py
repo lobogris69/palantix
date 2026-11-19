@@ -219,6 +219,7 @@ def menu(url, con_trakt=False):
          ("Mis series", "DefaultInProgressShows.png", "carpeta", url(accion="seguir")),
          ("Mi lista", "DefaultFavourites.png", "carpeta", url(accion="favoritas")),
          (TITULO_CINE_LIBRE, "DefaultMovies.png", "carpeta", url(accion="cine_libre")),
+         ("Deportes", "DefaultTVShows.png", "carpeta", url(accion="deportes")),
          ("Mis listas", "DefaultPlaylist.png", "carpeta", url(accion="listas"))]
     if con_trakt:
         m.append(("Trakt", "DefaultAddonService.png", "carpeta", url(accion="trakt")))

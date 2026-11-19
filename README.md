@@ -34,6 +34,24 @@ A partir de ahí las versiones nuevas llegan solas.
 - Aviso en la tele cuando sale un capítulo nuevo (al arrancar y cada 6 h).
 - **Siguiente capítulo** automático con cuenta atrás al final (se puede cancelar).
 
+**Deportes**
+- **Canales en directo** incluye Teledeporte, Esport3, Real Madrid TV y Top Barça.
+  La disponibilidad de cada señal depende del canal y de la ubicación.
+- En **Mis fuentes** puedes pegar un enlace Ace Stream, un código de 40 caracteres
+  o la URL de una lista M3U o JSON. Las direcciones se guardan en el perfil de Kodi.
+- **Configurar Ace Stream** abre los ajustes de Horus desde Palantix si está instalado.
+  La reproducción P2P usa Horus y el motor Ace Stream compatible con tu equipo.
+- **Hoy** ordena los eventos de tus listas por hora local. En JSON se indica
+  `inicio` en formato ISO 8601 (p. ej. `2026-11-19T20:00:00+01:00`) en cada
+  entrada del formato mostrado más abajo. En M3U utiliza el atributo
+  `inicio="2026-11-19T20:00:00+01:00"` en la línea `#EXTINF`.
+  Los enlaces sin fecha quedan disponibles en su propia lista.
+- Para consultar más señales y programación puedes usar
+  [TDTChannels](https://www.tdtchannels.com/listas/) y
+  [RTVE Play Deportes](https://www.rtve.es/play/videos/directo/deportes/).
+  [Ace Stream Broadcast Search](https://search-ace.stream/) permite buscar códigos
+  de emisiones. Su disponibilidad puede variar.
+
 **Fuentes e idioma**
 - **Mis listas**: hasta 3 enlaces o ficheros JSON/M3U (formato abajo), con caché y por grupos.
 - Etiquetas leídas del nombre: [CAST] [LAT] [VOSE] [DUAL] [4K] [1080p] [HDR] [CAM], con color a elegir.
