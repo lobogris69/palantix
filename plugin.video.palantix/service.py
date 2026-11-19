@@ -9,6 +9,8 @@ main.py deja los datos de lo que va a sonar en propiedades de la ventana princip
   palantix.siguiente  JSON {url, etiqueta}
 """
 import json
+import os
+from concurrent.futures import ThreadPoolExecutor
 
 import xbmc
 import xbmcaddon
@@ -200,6 +202,27 @@ def actualizar_solo():
         log("Actualización: %s" % e)
 
 
+def comprobar_fuentes():
+    """Procesa un lote sin bloquear el reproductor ni los listados."""
+    import xbmcvfs
+    from resources.lib import disponibilidad, fuentes_catalogo, mislistas, tmdb
+
+    addon = xbmcaddon.Addon()
+    ajustes = addon.getSetting
+    if ajustes("solo_peliculas_con_fuentes") != "true":
+        return
+    perfil = xbmcvfs.translatePath(addon.getAddonInfo("profile"))
+    cache = os.path.join(perfil, "cache")
+    clave = tmdb.limpiar_clave(ajustes("tmdb_key"))
+    idioma, region = tmdb.idioma_de(ajustes("idioma_cat") or 0)
+    cliente = tmdb.TMDB(clave, idioma, region) if clave else None
+    origenes = [l["origen"] for l in mislistas.leer(perfil)]
+    buscar, proveedores = fuentes_catalogo.consulta(cliente, ajustes, origenes, cache, log)
+    pref = fuentes_catalogo.preferencias(ajustes)
+    disponibilidad.comprobar_lote(
+        cache, (proveedores, pref), lambda peli: fuentes_catalogo.hay_fuentes(peli, buscar, pref))
+
+
 def main():
     monitor = xbmc.Monitor()
     reproductor = Reproductor()
@@ -208,15 +231,24 @@ def main():
         actualizar_solo()
         avisar_caducidad()
     segundos = 0
-    while not monitor.abortRequested():
-        reproductor.vigilar()
-        if segundos % (6 * 3600) == 40 and not reproductor.isPlayingVideo():  # al arrancar y cada 6 h
-            comprobar_novedades()
-            if segundos > 40:
-                actualizar_solo()
-        segundos += 1
-        if monitor.waitForAbort(1):
-            break
+    pendiente = None
+    with ThreadPoolExecutor(max_workers=1) as consultas:
+        while not monitor.abortRequested():
+            reproductor.vigilar()
+            if segundos % 3 == 0 and (pendiente is None or pendiente.done()):
+                if pendiente is not None and pendiente.exception() is not None:
+                    log("No se pudo actualizar el índice de fuentes")
+                if not reproductor.isPlayingVideo():
+                    pendiente = consultas.submit(comprobar_fuentes)
+                else:
+                    pendiente = None
+            if segundos % (6 * 3600) == 40 and not reproductor.isPlayingVideo():  # al arrancar y cada 6 h
+                comprobar_novedades()
+                if segundos > 40:
+                    actualizar_solo()
+            segundos += 1
+            if monitor.waitForAbort(1):
+                break
     log("Parado")
 
 

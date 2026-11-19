@@ -186,6 +186,7 @@ url = lambda **kw: "plugin://plugin.video.palantix/?" + urlencode(kw)
 
 class TFalso:
     idioma = "es-ES"
+    region = "ES"
     llamadas = 0
 
     def _r(self, n):
@@ -199,6 +200,7 @@ class TFalso:
     def s_tendencias(self, p): return self._r(2000)
     def en_cines(self, p): return self._r(3000)
     def mejor_valoradas(self, p): return self._r(4000)
+    def novedades_streaming(self, p): return self._r(7000)
 
 
 pg.apuntar(PERF, {"tipo": "pelicula", "tmdb": 653, "titulo": "Nosferatu", "anio": 1922, "fanart": "/n.jpg"}, 1200, 5640)
@@ -217,6 +219,10 @@ comprobar("inicio: película = reproducir, serie = abrir temporadas",
           and filas[104][0]["tipo"] == "carpeta" and "accion=temporadas" in filas[104][0]["url"])
 comprobar("inicio: línea de información «2025 · ★ 7.8 · Película»", filas[103][0]["info"] == "2025   ·   ★ 7.8   ·   Película")
 comprobar("inicio: Mi lista con las favoritas", [e["label"] for e in filas[107]] == ["Favorita"])
+comprobar("inicio: novedades en streaming pasan por el filtro de fuentes",
+          [e["label"] for e in inicio.datos_filas(
+              PERF, TFalso(), url, filtrar_peliculas=lambda pelis: [p for p in pelis if p["id"] == 7001]
+          )[108]] == ["Peli 7001"])
 antes = TFalso.llamadas
 inicio.datos_filas(PERF, TFalso(), url)
 comprobar("inicio: la segunda vez abre al instante (catálogo en caché, sin pedir a TMDB)", TFalso.llamadas == antes)

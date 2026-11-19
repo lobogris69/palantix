@@ -19,6 +19,7 @@ FILAS = [
     (105, "Estrenos en cines"),
     (106, "Las mejor valoradas"),
     (107, "Mi lista"),
+    (108, "Novedades en streaming"),
 ]
 TODAS = list(range(101, 111))  # ids de las filas del XML (101-102 anchas, 103-110 carátulas)
 
@@ -77,15 +78,18 @@ def elemento_serie(s, url):
 def _tmdb_cache(perfil, t):
     """Listados de TMDB para el inicio, en paralelo y guardados 1 hora (abre al instante)."""
     ruta = os.path.join(perfil, "inicio_cache.json")
+    region = t.region
     try:
         with open(ruta, encoding="utf-8") as f:
             c = json.load(f)
-        if time.time() - c.get("fecha", 0) < CACHE_SEG and c.get("idioma") == t.idioma:
+        if (time.time() - c.get("fecha", 0) < CACHE_SEG and c.get("idioma") == t.idioma
+                and c.get("region") == region and "streaming" in c["datos"]):
             return c["datos"]
     except (OSError, ValueError, KeyError):
         pass
-    tareas = {"tendencias": t.tendencias, "series": t.s_tendencias, "cines": t.en_cines, "valoradas": t.mejor_valoradas}
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    tareas = {"tendencias": t.tendencias, "series": t.s_tendencias, "cines": t.en_cines,
+              "valoradas": t.mejor_valoradas, "streaming": t.novedades_streaming}
+    with ThreadPoolExecutor(max_workers=len(tareas)) as pool:
         futuros = {k: pool.submit(f, 1) for k, f in tareas.items()}
     datos = {}
     for k, fut in futuros.items():
@@ -96,7 +100,7 @@ def _tmdb_cache(perfil, t):
     if any(datos.values()):
         os.makedirs(perfil, exist_ok=True)
         with open(ruta, "w", encoding="utf-8") as f:
-            json.dump({"fecha": time.time(), "idioma": t.idioma, "datos": datos}, f)
+            json.dump({"fecha": time.time(), "idioma": t.idioma, "region": region, "datos": datos}, f)
     return datos
 
 
@@ -155,7 +159,7 @@ def datos_filas(perfil, t, url, favoritas=(), filtrar_peliculas=lambda pelis: pe
     # 101 Continuar viendo: películas a medias + siguiente capítulo de las series empezadas
     a_medias = progreso.peliculas(perfil)[:10]
     tm = _tmdb_cache(perfil, t) if t else {}
-    pelis = [m for grupo in ("tendencias", "cines", "valoradas") for m in tm.get(grupo, [])]
+    pelis = [m for grupo in ("tendencias", "cines", "valoradas", "streaming") for m in tm.get(grupo, [])]
     pelis.extend(favoritas)
     pelis.extend(dict(id=d["tmdb"], title=d["titulo"], original_title=d.get("original"),
                       release_date=str(d.get("anio") or "")) for d in a_medias)
@@ -196,6 +200,7 @@ def datos_filas(perfil, t, url, favoritas=(), filtrar_peliculas=lambda pelis: pe
 
     # 107 Mi lista (favoritas)
     filas[107] = [elemento_pelicula(m, url) for m in favoritas if str(m["id"]) in visibles]
+    filas[108] = [elemento_pelicula(m, url) for m in tm.get("streaming", []) if str(m["id"]) in visibles]
     return filas
 
 
