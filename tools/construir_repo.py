@@ -28,6 +28,7 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SALIDA = os.path.join(RAIZ, "docs")
 ADDON = os.path.join(RAIZ, "plugin.video.palantix")
 IGNORAR = ("__pycache__", ".pyc", ".git")
+GUARDAR = 6  # versiones anteriores que se mantienen en el repositorio
 
 
 def version(carpeta):
@@ -101,8 +102,22 @@ def indice(carpeta, titulo):
 def main():
     if len(sys.argv) < 2 or not sys.argv[1].startswith("http"):
         sys.exit(__doc__)
+    # Se GUARDAN los zips de versiones anteriores: una tele que tenga apuntada una versión algo
+    # antigua en su revisión diaria tiene que poder descargarla (si no, Kodi da «Update failed»).
+    previos = os.path.join(SALIDA, "plugin.video.palantix")
+    viejos = {}
+    if os.path.isdir(previos):
+        for f in os.listdir(previos):
+            if f.endswith(".zip"):
+                with open(os.path.join(previos, f), "rb") as z:
+                    viejos[f] = z.read()
     shutil.rmtree(SALIDA, ignore_errors=True)
     os.makedirs(SALIDA)
+    os.makedirs(previos)
+    conservar = sorted(viejos, key=lambda n: [int(x) for x in re.findall(r"\d+", n)])[-GUARDAR:]
+    for f in conservar:
+        with open(os.path.join(previos, f), "wb") as z:
+            z.write(viejos[f])
     carpetas = [ADDON, crear_addon_repositorio(sys.argv[1])]
     bloques = []
     for c in carpetas:
