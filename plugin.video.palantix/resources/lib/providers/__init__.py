@@ -11,7 +11,7 @@ PROVEEDORES = [
 ]
 
 
-def buscar_fuentes(peli, activo=lambda prov_id: True, log=print, extra=()):
+def buscar_fuentes(peli, activo=lambda prov_id: True, log=print, extra=(), fallo=lambda proveedor: None):
     """Lanza la búsqueda en todos los proveedores activos a la vez.
 
     `activo` decide por id si un proveedor está encendido (en Kodi lo lee de los ajustes).
@@ -25,7 +25,8 @@ def buscar_fuentes(peli, activo=lambda prov_id: True, log=print, extra=()):
         try:
             return prov.buscar(peli)
         except Exception as e:  # una fuente caída no debe romper la app
-            log("[Palantix] %s falló: %s" % (prov.nombre, e))
+            fallo(prov.nombre)
+            log("[Palantix] %s falló: %s" % (prov.nombre, type(e).__name__))
             return []
 
     with ThreadPoolExecutor(max_workers=len(elegidos)) as pool:

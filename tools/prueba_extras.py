@@ -198,6 +198,7 @@ class TFalso:
 
     def tendencias(self, p): return self._r(1000)
     def s_tendencias(self, p): return self._r(2000)
+    def s_capitulos_recientes(self, p): return self._r(8000)
     def en_cines(self, p): return self._r(3000)
     def mejor_valoradas(self, p): return self._r(4000)
     def novedades_streaming(self, p): return self._r(7000)
@@ -250,6 +251,8 @@ comprobar("pestaña Películas: la fila Terror pide el género 27 y reproduce", 
 ser = inicio.datos_pestana(PP, TPestanas(), url, "series")
 comprobar("pestaña Series: las series abren sus temporadas", ser[106][0]["label"] == "Serie %d" % (9000 + 18)
           and ser[106][0]["tipo"] == "carpeta" and "accion=temporadas" in ser[106][0]["url"])
+comprobar("pestaña Series: capítulos recientes abre la serie",
+          ser[111][0]["label"] == "Serie 8000" and "accion=temporadas" in ser[111][0]["url"])
 antes = TFalso.llamadas
 inicio.datos_pestana(PP, TPestanas(), url, "peliculas")
 comprobar("pestañas: la segunda vez abren al instante (caché)", TFalso.llamadas == antes)

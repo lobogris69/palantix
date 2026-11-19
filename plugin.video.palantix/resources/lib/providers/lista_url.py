@@ -15,9 +15,10 @@ class ListaURL(Proveedor):
     id = "listas"
     nombre = "Mis listas"
 
-    def __init__(self, origenes, cache_dir=None, ttl=3600, log=print):
+    def __init__(self, origenes, cache_dir=None, ttl=3600, log=print, fallo=lambda proveedor: None):
         self.origenes = [o for o in origenes if o and o.strip()]
         self.cache_dir, self.ttl, self.log = cache_dir, ttl, log
+        self.fallo = fallo
 
     def buscar(self, peli):
         titulos = {_n(peli.titulo), _n(peli.titulo_original)} - {""}
@@ -26,7 +27,8 @@ class ListaURL(Proveedor):
             try:
                 items = listas.cargar(origen, self.cache_dir, self.ttl)
             except Exception as e:
-                self.log("[Palantix] Lista %d ilegible: %s" % (n, e))
+                self.fallo("Lista %d" % n)
+                self.log("[Palantix] Lista %d ilegible: %s" % (n, type(e).__name__))
                 continue
             for it in items:
                 if not self._coincide(it, peli, titulos):

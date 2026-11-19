@@ -10,6 +10,7 @@ main.py deja los datos de lo que va a sonar en propiedades de la ventana princip
 """
 import json
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import xbmc
@@ -80,6 +81,16 @@ class Reproductor(xbmc.Player):
                 self.setAudioStream(pista)
         except (RuntimeError, ValueError, TypeError, KeyError):
             log("Kodi no pudo aplicar el idioma de audio preferido")
+
+    def onPlayBackError(self):
+        solicitud = propiedad_json("palantix.meta") or {}
+        reciente = time.time() - solicitud.get("inicio_solicitado", 0) < 90
+        if self.meta or reciente:
+            xbmcgui.Dialog().notification("Palantix", "Kodi no pudo abrir o continuar el vídeo. Prueba otra fuente.",
+                                         xbmcgui.NOTIFICATION_WARNING, 7000)
+        VENTANA.clearProperty("palantix.meta")
+        VENTANA.clearProperty("palantix.siguiente")
+        self._fin(terminado=False)
 
     def onPlayBackStopped(self):
         self._fin(terminado=False)
@@ -209,7 +220,9 @@ def comprobar_fuentes():
 
     addon = xbmcaddon.Addon()
     ajustes = addon.getSetting
-    if ajustes("solo_peliculas_con_fuentes") != "true":
+    peliculas = ajustes("solo_peliculas_con_fuentes") == "true"
+    episodios = ajustes("comprobar_fuentes_episodios") == "true"
+    if not (peliculas or episodios):
         return
     perfil = xbmcvfs.translatePath(addon.getAddonInfo("profile"))
     cache = os.path.join(perfil, "cache")
@@ -219,8 +232,13 @@ def comprobar_fuentes():
     origenes = [l["origen"] for l in mislistas.leer(perfil)]
     buscar, proveedores = fuentes_catalogo.consulta(cliente, ajustes, origenes, cache, log)
     pref = fuentes_catalogo.preferencias(ajustes)
-    disponibilidad.comprobar_lote(
-        cache, (proveedores, pref), lambda peli: fuentes_catalogo.hay_fuentes(peli, buscar, pref))
+    def consultar(ficha):
+        return fuentes_catalogo.hay_fuentes(ficha, buscar, pref)
+
+    if episodios:
+        disponibilidad.comprobar_lote(cache, (proveedores, pref, "episodios"), consultar)
+    if peliculas:
+        disponibilidad.comprobar_lote(cache, (proveedores, pref), consultar)
 
 
 def main():

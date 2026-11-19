@@ -11,10 +11,11 @@ import xbmcgui
 import xbmcplugin
 import xbmcvfs
 
-from resources.lib import disponibilidad, etiquetas, fuentes_catalogo, listas
+from resources.lib import disponibilidad, etiquetas, fuentes_catalogo, listas, preferencias_copia
 from resources.lib import actualizar, debrid, inicio, mislistas, novedades, progreso, seguimiento, subtitulos, trakt
 from resources.lib import tmdb as tmdb_mod
 from resources.lib.providers import Peli
+from resources.lib.providers.stremio import Stremio
 
 ADDON = xbmcaddon.Addon()
 BASE = sys.argv[0]
@@ -269,8 +270,9 @@ def servicio_por_id(sid):
     return trakt.Trakt(AJ, log=log) if sid == "trakt" else debrid.por_id(sid, AJ, **_kw())
 
 
-def vincular():
-    s = servicio_por_id(PARAMS["s"])
+def vincular(sid=None):
+    sid = sid or PARAMS["s"]
+    s = servicio_por_id(sid)
     if s.tipo_vinculo == "clave":
         clave = xbmcgui.Dialog().input("Clave de la API de %s (la ves en tu cuenta, en la web)" % s.nombre)
         if not clave:
@@ -283,7 +285,7 @@ def vincular():
             return xbmcgui.Dialog().ok(s.nombre, "La clave no funciona: %s" % e)
         AJ.set(s.id + "_activo", "true")
         return xbmcgui.Dialog().ok(s.nombre, "Cuenta vinculada.\n" + texto)
-    if PARAMS["s"] == "trakt" and not s.configurado():
+    if sid == "trakt" and not s.configurado():
         return xbmcgui.Dialog().ok("Trakt", "En developer.trakt.tv/apps, crea una app Development o usa la de Palantix\n"
                                    "y pon su Client ID en Ajustes → Trakt.")
     try:
@@ -488,6 +490,7 @@ def menu_peliculas():
 
 
 def menu_series():
+    carpeta("Capítulos recientes", url(accion="s_capitulos_recientes"))
     carpeta("Tendencias de la semana", url(accion="s_tendencias"))
     carpeta("Populares", url(accion="s_populares"))
     carpeta("Mejor valoradas", url(accion="s_mejor_valoradas"))
@@ -565,6 +568,27 @@ def sagas_buscar(t):
     xbmcplugin.endOfDirectory(HANDLE)
 
 
+def fuentes_episodios(sid, datos, capitulos):
+    """Encola capítulos emitidos y devuelve los que ya tienen fuente confirmada."""
+    if not capitulos or ADDON.getSetting("comprobar_fuentes_episodios") != "true":
+        return set(), False
+
+    _, proveedores = consulta_fuentes(None)
+    configuracion = (proveedores, preferencias(), "episodios")
+    confirmados, pendientes = set(), False
+    for i in range(0, len(capitulos), 400):
+        fichas = [
+            {"id": "%s:%d:%d" % (sid, s, e), "tmdb_id": int(sid), "temporada": s, "episodio": e,
+             "title": datos.get("titulo") or "", "original_title": datos.get("original") or "",
+             "release_date": str(datos.get("anio") or "")}
+            for s, e in capitulos[i:i + 400]
+        ]
+        visibles, en_cola = disponibilidad.filtrar(fichas, CACHE, configuracion)
+        confirmados.update((f["temporada"], f["episodio"]) for f in visibles)
+        pendientes = pendientes or en_cola
+    return confirmados, pendientes
+
+
 def seguir_viendo(t):
     """Series en seguimiento: primero las que tienen capítulos NUEVOS, luego pendientes y al final las que están al día."""
     if t:
@@ -601,6 +625,18 @@ def seguir_viendo(t):
             li = xbmcgui.ListItem("%s  %s" % (d["titulo"], color("al día · " + cola, GRIS)))
             destino, es_carpeta = url(accion="temporadas", **comun), True
             texto = "Has visto hasta el %sx%02d.\nEstado: %s." % (d["s"], int(d["e"]), cola)
+        confirmados, en_cola = fuentes_episodios(sid, d, n.get("episodios_pendientes", []))
+        if confirmados:
+            distintivo = "%d con fuente" % len(confirmados)
+        elif en_cola:
+            distintivo = "Comprobando fuentes"
+        elif sig and n.get("episodios_pendientes") and ADDON.getSetting("comprobar_fuentes_episodios") == "true":
+            distintivo = "Sin fuente confirmada"
+        else:
+            distintivo = ""
+        if distintivo:
+            li.setLabel("%s  %s" % (li.getLabel(), color(distintivo, VERDE if confirmados else GRIS)))
+            texto = distintivo + "\n" + texto
         tag = li.getVideoInfoTag()
         tag.setMediaType("episode" if sig else "tvshow")
         tag.setTvShowTitle(d.get("titulo", ""))
@@ -613,8 +649,14 @@ def seguir_viendo(t):
         li.setArt({"poster": tmdb_mod.TMDB.imagen(d.get("poster")),
                    "thumb": tmdb_mod.TMDB.imagen((sig or {}).get("still"), "w500") or tmdb_mod.TMDB.imagen(d.get("fanart"), "w780"),
                    "fanart": tmdb_mod.TMDB.imagen(d.get("fanart"), "w1280")})
-        li.addContextMenuItems([("Ver temporadas", "Container.Update(%s)" % url(accion="temporadas", **comun)),
-                                ("Quitar de seguimiento", "RunPlugin(%s)" % url(accion="dejar_seguir", id=sid))])
+        acciones = [("Ver temporadas", "Container.Update(%s)" % url(accion="temporadas", **comun)),
+                    ("Quitar de seguimiento", "RunPlugin(%s)" % url(accion="dejar_seguir", id=sid))]
+        if confirmados and sig and (sig["s"], sig["e"]) not in confirmados:
+            s_disp, e_disp = min(confirmados)
+            reproducible = url(accion="reproducir", tipo="episodio", s=s_disp, e=e_disp,
+                              poster=d.get("poster", ""), fondo=d.get("fanart", ""), **comun)
+            acciones.insert(0, ("Ver %dx%02d con fuente" % (s_disp, e_disp), "PlayMedia(%s)" % reproducible))
+        li.addContextMenuItems(acciones)
         xbmcplugin.addDirectoryItem(HANDLE, destino, li, es_carpeta)
         hay = True
     if not hay:
@@ -737,16 +779,25 @@ def capitulos(t):
     serie = PARAMS.get("titulo", "")
     hoy = time.strftime("%Y-%m-%d")
     seg = mis_series().get(str(PARAMS["id"])) or {}
-    visto_hasta = (int(seg.get("s") or 0), int(seg.get("e") or 0))
     visto_dia = time.strftime("%Y-%m-%d", time.localtime(seg["fecha"])) if seg.get("fecha") else ""
-    for ep in temp.get("episodes", []):
+    episodios = temp.get("episodes", [])
+    emitidos = [(ep["season_number"], ep["episode_number"]) for ep in episodios
+                if ep.get("air_date") and ep["air_date"] <= hoy
+                and not seguimiento.esta_visto(seg, ep["season_number"], ep["episode_number"])]
+    confirmados, _ = fuentes_episodios(PARAMS["id"], PARAMS, emitidos)
+    for ep in episodios:
         emitido = ep.get("air_date") or ""
         n_s, n_e = ep["season_number"], ep["episode_number"]
+        visto = seguimiento.esta_visto(seg, n_s, n_e)
         nombre = "%dx%02d. %s" % (n_s, n_e, ep.get("name") or "")
         if not emitido or emitido > hoy:
             nombre = color("%s (sale el %s)" % (nombre, fecha_es(emitido) or "?"), GRIS)
-        elif seg and (n_s, n_e) > visto_hasta and emitido > visto_dia:
+        elif seg and not visto and emitido > visto_dia:
             nombre = "%s  %s" % (nombre, color("● NUEVO", VERDE))
+        if visto:
+            nombre += "  " + color("✓ VISTO", VERDE)
+        elif (n_s, n_e) in confirmados:
+            nombre += "  " + color("Con fuente", VERDE)
         li = xbmcgui.ListItem(nombre)
         li.setArt({"thumb": tmdb_mod.TMDB.imagen(ep.get("still_path"), "w300"),
                    "poster": tmdb_mod.TMDB.imagen(temp.get("poster_path"))})
@@ -760,7 +811,7 @@ def capitulos(t):
         tag.setFirstAired(emitido)
         if ep.get("runtime"):
             tag.setDuration(int(ep["runtime"]) * 60)
-        if seg and (n_s, n_e) <= visto_hasta:
+        if visto:
             tag.setPlaycount(1)  # marca de visto
         prog = mi_progreso().get("e:%s:%s:%s" % (PARAMS["id"], n_s, n_e))
         if prog:
@@ -769,9 +820,24 @@ def capitulos(t):
         destino = url(accion="reproducir", tipo="episodio", id=PARAMS["id"], titulo=serie,
                       original=PARAMS.get("original", ""), anio=PARAMS.get("anio", ""), s=n_s, e=n_e,
                       poster=PARAMS.get("poster", ""), fondo=PARAMS.get("fondo", ""))
-        li.addContextMenuItems([("Elegir fuente", "PlayMedia(%s&elegir=1)" % destino)])
+        acciones = [("Elegir fuente", "PlayMedia(%s&elegir=1)" % destino)]
+        if emitido and emitido <= hoy:
+            cambio = "Marcar como no visto" if visto else "Marcar como visto"
+            accion = url(accion="marcar_capitulo", id=PARAMS["id"], s=n_s, e=n_e, visto=int(not visto),
+                         titulo=serie, original=PARAMS.get("original", ""), anio=PARAMS.get("anio", ""),
+                         poster=PARAMS.get("poster", ""), fondo=PARAMS.get("fondo", ""))
+            acciones.append((cambio, "RunPlugin(%s)" % accion))
+        li.addContextMenuItems(acciones)
         xbmcplugin.addDirectoryItem(HANDLE, destino, li, False)
     fin_listado("episodes")
+
+
+def marcar_capitulo():
+    meta = {"tipo": "episodio", "tmdb": PARAMS["id"], "s": int(PARAMS["s"]), "e": int(PARAMS["e"]),
+            "titulo": PARAMS.get("titulo"), "original": PARAMS.get("original"), "anio": PARAMS.get("anio"),
+            "poster": PARAMS.get("poster"), "fanart": PARAMS.get("fondo")}
+    seguimiento.marcar_visto(PERFIL, meta, visto=PARAMS["visto"] == "1")
+    xbmc.executebuiltin("Container.Refresh")
 
 
 def favoritas():
@@ -959,9 +1025,9 @@ def preferencias():
     return fuentes_catalogo.preferencias(ADDON.getSetting)
 
 
-def consulta_fuentes(t):
+def consulta_fuentes(t, fallo=lambda proveedor: None):
     origenes = origenes_listas() if ADDON.getSetting("prov_listas") != "false" else []
-    return fuentes_catalogo.consulta(t, ADDON.getSetting, origenes, CACHE, log)
+    return fuentes_catalogo.consulta(t, ADDON.getSetting, origenes, CACHE, log, fallo)
 
 
 def peliculas_disponibles(peliculas):
@@ -976,6 +1042,113 @@ def peliculas_disponibles(peliculas):
         else:
             aviso("No se encontraron fuentes para las películas de esta página")
     return visibles
+
+
+def comprobar_manifiestos():
+    lineas = []
+    for n in range(1, 4):
+        origen = ADDON.getSetting("stremio_%d" % n).strip()
+        estado = "Sin configurar"
+        if origen:
+            try:
+                _, datos = Stremio(origen, n).leer_manifiesto()
+                recursos = datos["resources"]
+                admite = any(r == "stream" or (isinstance(r, dict) and r.get("name") == "stream")
+                             for r in recursos)
+                estado = "Manifiesto accesible" if admite else "Manifiesto sin recurso de reproducción"
+            except (OSError, ValueError, TypeError):
+                estado = "No se pudo leer el manifiesto"
+        lineas.append("Fuente %d · %s" % (n, estado))
+    xbmcgui.Dialog().ok("Fuentes de Stremio", "\n".join(lineas))
+
+
+def estado_indice():
+    _, proveedores = consulta_fuentes(None)
+    pref = preferencias()
+    lineas = []
+    for titulo, config in (("Películas", (proveedores, pref)), ("Capítulos", (proveedores, pref, "episodios"))):
+        confirmados, cola, ultima = disponibilidad.resumen(CACHE, config)
+        fecha = time.strftime("%d/%m/%Y %H:%M", time.localtime(ultima)) if ultima else "sin comprobaciones"
+        lineas.append("%s · %d con fuente · %d por comprobar\nÚltima revisión: %s" %
+                      (titulo, confirmados, cola, fecha))
+    xbmcgui.Dialog().ok("Estado de la comprobación de fuentes", "\n\n".join(lineas))
+
+
+def asistente_configuracion():
+    addon = xbmcaddon.Addon()
+    tk, ad = servicio_por_id("trakt"), servicio_por_id("ad")
+    def estado(servicio):
+        if not servicio.vinculado():
+            return "Sin vincular"
+        return "Vinculado" if servicio.encendido() else "Desactivado"
+
+    opciones = [
+        ("TMDB · " + ("Clave guardada" if clave_tmdb() else "Sin configurar"), comprobar_tmdb),
+        ("Trakt · " + estado(tk), lambda: comprobar_cuenta_asistente("trakt")),
+        ("AllDebrid · " + estado(ad), lambda: comprobar_cuenta_asistente("ad")),
+        ("Stremio · " + ("Activo" if addon.getSetting("prov_stremio") == "true" else "Desactivado"),
+         comprobar_manifiestos),
+        ("Estado de la comprobación de fuentes", estado_indice),
+        ("Probar vídeo directo · Sintel (Blender)", probar_video_asistente),
+        ("Copiar preferencias a otro Kodi", copiar_preferencias),
+    ]
+    seleccion = xbmcgui.Dialog().select("Comprobar mi configuración", [nombre for nombre, _ in opciones])
+    if seleccion >= 0:
+        opciones[seleccion][1]()
+
+
+def comprobar_cuenta_asistente(sid):
+    servicio = servicio_por_id(sid)
+    if not servicio.vinculado():
+        return vincular(sid)
+    try:
+        servicio.cuenta()
+    except Exception:
+        return xbmcgui.Dialog().ok(servicio.nombre, "No se pudo comprobar la cuenta. Revisa la conexión o vuelve a vincular.")
+    estado = "Servicio activo." if servicio.encendido() else "Activa el servicio en Ajustes para usarlo."
+    xbmcgui.Dialog().ok(servicio.nombre, "La cuenta responde. " + estado)
+
+
+def probar_video_asistente():
+    video = "https://download.blender.org/durian/movies/Sintel.2010.1080p.mkv"
+    xbmc.Player().play(video, xbmcgui.ListItem("Sintel · Prueba de reproducción"))
+
+
+def copiar_preferencias():
+    dialogo = xbmcgui.Dialog()
+    accion = dialogo.select("Preferencias de Palantix", ["Exportar preferencias", "Importar preferencias"])
+    if accion not in (0, 1):
+        return
+    if accion == 0:
+        destino = dialogo.browseSingle(3, "Carpeta para guardar las preferencias", "files")
+        if not destino:
+            return
+        nombre = "palantix-preferencias-%s.json" % time.strftime("%Y%m%d-%H%M%S")
+        try:
+            with open(os.path.join(xbmcvfs.translatePath(destino), nombre), "x", encoding="utf-8") as f:
+                f.write(preferencias_copia.exportar(ADDON.getSetting))
+        except OSError:
+            return dialogo.ok("Palantix", "No se pudo guardar el archivo. Elige una carpeta local con permiso de escritura.")
+        return dialogo.ok("Palantix", "Preferencias guardadas en " + nombre)
+
+    origen = dialogo.browseSingle(1, "Elige un archivo de preferencias", "files", ".json")
+    if not origen:
+        return
+    try:
+        with open(xbmcvfs.translatePath(origen), "rb") as f:
+            datos = preferencias_copia.importar(f.read(preferencias_copia.MAX_BYTES + 1).decode("utf-8"))
+    except (OSError, ValueError):
+        return dialogo.ok("Palantix", "No se pudo leer un archivo válido de preferencias.")
+    if dialogo.yesno("Palantix", "¿Aplicar las preferencias de idioma, calidad y menús de este archivo?"):
+        anteriores = {clave: ADDON.getSetting(clave) for clave in datos}
+        try:
+            for clave, valor in datos.items():
+                ADDON.setSetting(clave, valor)
+        except (RuntimeError, ValueError):
+            for clave, valor in anteriores.items():
+                ADDON.setSetting(clave, valor)
+            return dialogo.ok("Palantix", "No se pudo aplicar la copia de preferencias.")
+        dialogo.ok("Palantix", "Preferencias importadas. Vuelve a abrir Palantix para ver los cambios.")
 
 
 def no_reproducir():
@@ -1003,8 +1176,9 @@ def reproducir():
         desde = previo["pos"] if n == 0 else 0
     barra = xbmcgui.DialogProgress()
     barra.create("Palantix", "Buscando fuentes para «%s»..." % nombre)
+    fallos = []
     try:
-        buscar, _ = consulta_fuentes(api(obligatoria=False))
+        buscar, _ = consulta_fuentes(api(obligatoria=False), fallos.append)
         fuentes = buscar(peli)
     finally:
         barra.close()
@@ -1012,7 +1186,10 @@ def reproducir():
     pref = preferencias()
     ordenadas = etiquetas.ordenar(fuentes, **pref)
     if not ordenadas:
-        aviso("No hay fuentes para «%s»%s" % (nombre, " en tu idioma" if fuentes else ""))
+        if fallos:
+            aviso("Búsqueda incompleta. Sin respuesta de: " + ", ".join(sorted(set(fallos))))
+        else:
+            aviso("No hay fuentes para «%s»%s" % (nombre, " en tu idioma" if fuentes else ""))
         return no_reproducir()
 
     automatico = ADDON.getSetting("autoplay") == "true" and not PARAMS.get("elegir")
@@ -1048,13 +1225,13 @@ def reproducir():
         if not f.privada:
             log("Reproduciendo %s" % f.url)
         prioridad_audio = pref["prioridad_idiomas"] or (pref["idioma"],)
-        avisar_al_servicio(peli, prioridad_audio)
         li = xbmcgui.ListItem(path=ruta)
         if desde:
             li.setProperty("StartOffset", str(int(desde)))
         sub = poner_subtitulos(peli, a, pref)
         if sub:
             li.setSubtitles([sub])
+        avisar_al_servicio(peli, prioridad_audio)
         return xbmcplugin.setResolvedUrl(HANDLE, True, li)
     no_reproducir()
 
@@ -1093,7 +1270,7 @@ def avisar_al_servicio(peli, prioridad_audio=()):
     meta = {"tipo": peli.tipo, "tmdb": peli.tmdb_id, "s": peli.temporada, "e": peli.episodio,
             "titulo": peli.titulo, "original": peli.titulo_original, "anio": peli.anio,
             "poster": PARAMS.get("poster", ""), "fanart": PARAMS.get("fondo", ""),
-            "prioridad_audio": prioridad_audio}
+            "prioridad_audio": prioridad_audio, "inicio_solicitado": time.time()}
     ventana.setProperty("palantix.meta", json.dumps(meta))
     ventana.clearProperty("palantix.siguiente")
     if peli.tipo != "episodio" or ADDON.getSetting("siguiente_activo") == "false":
@@ -1128,11 +1305,15 @@ SIN_TMDB = {
     "listas": mis_listas,
     "anios": lambda: anios(PARAMS["destino"]),
     "dejar_seguir": dejar_seguir,
+    "marcar_capitulo": marcar_capitulo,
     "a_medias": a_medias,
     "trakt": menu_trakt,
     "quitar_medias": quitar_medias,
     "trailer": trailer,
     "ajustes": ADDON.openSettings,
+    "asistente_configuracion": asistente_configuracion,
+    "estado_indice": estado_indice,
+    "copiar_preferencias": copiar_preferencias,
     "orden_idiomas": configurar_prioridad_idiomas,
     "tmdb_clave": comprobar_tmdb,
     "actualizar": lambda: buscar_actualizacion(),
@@ -1150,7 +1331,7 @@ def con_tmdb(t, accion, page):
     vp = varias_paginas
     if accion in ("tendencias", "populares", "en_cines", "mejor_valoradas", "novedades_streaming"):
         listar(vp(getattr(t, accion), page), accion)
-    elif accion in ("s_tendencias", "s_populares", "s_mejor_valoradas"):
+    elif accion in ("s_tendencias", "s_populares", "s_mejor_valoradas", "s_capitulos_recientes"):
         listar_series(vp(getattr(t, accion), page), accion)
     elif accion == "anio":
         listar(vp(lambda n: t.por_anio(anio, n), page), "anio", a=anio)

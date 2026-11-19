@@ -24,6 +24,7 @@ def _abrir(carpeta):
                        "caduca INTEGER, PRIMARY KEY (config, id))")
             db.execute("CREATE TABLE IF NOT EXISTS pendientes (config TEXT, id TEXT, pelicula TEXT, "
                        "encolada INTEGER, PRIMARY KEY (config, id))")
+            db.execute("CREATE TABLE IF NOT EXISTS estado (config TEXT PRIMARY KEY, comprobado INTEGER)")
             yield db
     finally:
         db.close()
@@ -46,7 +47,7 @@ def filtrar(peliculas, carpeta, configuracion):
         pendientes = []
         for i, peli in candidatos.items():
             if guardadas.get(i, (0, 0))[1] <= ahora:
-                ficha = {k: peli[k] for k in ("id", "title", "original_title", "release_date", "imdb_id") if k in peli}
+                ficha = {k: peli[k] for k in ("id", "title", "original_title", "release_date", "imdb_id", "tmdb_id", "temporada", "episodio") if k in peli}
                 pendientes.append((clave, i, json.dumps(ficha), ahora))
         if pendientes:
             db.executemany("INSERT OR IGNORE INTO pendientes VALUES (?, ?, ?, ?)", pendientes)
@@ -80,3 +81,19 @@ def comprobar_lote(carpeta, configuracion, consultar):
                        [(clave, i, int(disponible), ahora + (DIA if disponible else 3600))
                         for (i, _), disponible in zip(lote, resultados)])
         db.executemany("DELETE FROM pendientes WHERE config = ? AND id = ?", [(clave, i) for i, _ in lote])
+        db.execute("INSERT OR REPLACE INTO estado VALUES (?, ?)", (clave, ahora))
+
+
+def resumen(carpeta, configuracion):
+    if not os.path.isfile(os.path.join(carpeta, "disponibilidad.sqlite")):
+        return 0, 0, None
+    clave = _clave(configuracion)
+    ahora = int(time.time())
+    with _abrir(carpeta) as db:
+        disponibles = db.execute(
+            "SELECT count(*) FROM peliculas WHERE config = ? AND disponible = 1 AND caduca > ?",
+            (clave, ahora - 7 * DIA)).fetchone()[0]
+        pendientes = db.execute("SELECT count(*) FROM pendientes WHERE config = ? AND encolada >= ?",
+                               (clave, ahora - DIA)).fetchone()[0]
+        ultima = db.execute("SELECT comprobado FROM estado WHERE config = ?", (clave,)).fetchone()
+    return disponibles, pendientes, ultima[0] if ultima else None

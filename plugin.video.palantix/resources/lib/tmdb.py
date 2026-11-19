@@ -134,6 +134,13 @@ class TMDB:
     def s_tendencias(self, page=1):
         return self._get("/trending/tv/week", page=page)
 
+    def s_capitulos_recientes(self, page=1):
+        """Series con emisiones recientes dejando dos días desde la emisión."""
+        hasta = date.today() - timedelta(days=2)
+        desde = hasta - timedelta(days=13)
+        return self._get("/discover/tv", page=page, sort_by="popularity.desc",
+                         **{"air_date.gte": desde.isoformat(), "air_date.lte": hasta.isoformat()})
+
     def s_populares(self, page=1):
         return self._get("/tv/popular", page=page)
 
