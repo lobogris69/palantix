@@ -3,10 +3,14 @@
     <category label="General">
         <setting id="tmdb_key" type="text" label="Clave de TMDB" default=""/>
         <setting type="action" label="Escribir o comprobar la clave de TMDB" action="RunPlugin(plugin://plugin.video.palantix/?accion=tmdb_clave)"/>
+        <setting id="auto_actualizar" type="bool" label="Actualizar Palantix solo cuando haya versión nueva" default="true"/>
+        <setting type="action" label="Buscar actualización ahora" action="RunPlugin(plugin://plugin.video.palantix/?accion=actualizar)"/>
         <setting id="idioma" type="text" label="Idioma del catálogo" default="es-ES"/>
         <setting id="region" type="text" label="Región" default="ES"/>
     </category>
     <category label="Catálogo">
+        <setting id="inicio_plataforma" type="bool" label="Pantalla de inicio con carteles y filas de carátulas" default="true"/>
+        <setting id="vista_listados" type="enum" label="Vista de películas y series" values="Carátulas grandes|Mosaico|Mosaico con información|Lista" default="0"/>
         <setting id="orden_listas" type="enum" label="Orden de géneros y años" values="Más populares|Más recientes|Mejor valoradas|Alfabético" default="0"/>
         <setting id="paginas" type="enum" label="Elementos por pantalla" values="20|40|60" default="0"/>
         <setting id="recordar_busquedas" type="bool" label="Recordar las últimas búsquedas" default="true"/>

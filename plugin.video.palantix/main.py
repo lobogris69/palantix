@@ -12,7 +12,7 @@ import xbmcplugin
 import xbmcvfs
 
 from resources.lib import etiquetas, listas
-from resources.lib import debrid, novedades, progreso, seguimiento, subtitulos, trakt
+from resources.lib import actualizar, debrid, inicio, novedades, progreso, seguimiento, subtitulos, trakt
 from resources.lib import tmdb as tmdb_mod
 from resources.lib.providers import ListaURL, Peli, buscar_fuentes
 
@@ -170,6 +170,25 @@ def varias_paginas(funcion, pagina):
     for n in range(primera + 1, min(primera + k, total + 1)):
         resultados += funcion(n).get("results", [])
     return {"page": pagina, "total_pages": -(-total // k), "results": resultados}
+
+
+# Vistas de la piel Estuary: 51 Póster, 500 Mosaico, 54 Mosaico con información, 55 Lista ancha, 50 Lista
+VISTAS = {"movies": (51, 500, 54, 50), "tvshows": (51, 500, 54, 50), "seasons": (51, 500, 54, 50),
+          "episodes": (55, 55, 54, 50)}
+
+
+def vista(contenido):
+    """Pone la vista de carátulas que toca. Solo con Estuary: otras pieles usan otros números."""
+    if xbmc.getSkinDir() != "skin.estuary" or contenido not in VISTAS:
+        return
+    i = min(max(ajuste_int("vista_listados", 0), 0), 3)
+    xbmc.executebuiltin("Container.SetViewMode(%d)" % VISTAS[contenido][i])
+
+
+def fin_listado(contenido=None, ok=True):
+    xbmcplugin.endOfDirectory(HANDLE, succeeded=ok, cacheToDisc=False)
+    if ok and contenido:
+        vista(contenido)
 
 
 LOGO = ADDON.getAddonInfo("icon")
@@ -400,7 +419,7 @@ def listar(datos, accion, ficha=ficha_pelicula, contenido="movies", **extra):
     pagina, total = int(datos.get("page", 1)), int(datos.get("total_pages", 1))
     if pagina < min(total, 500):  # TMDB no sirve más allá de la página 500
         carpeta("Página siguiente (%d) >>" % (pagina + 1), url(accion=accion, page=pagina + 1, **extra))
-    xbmcplugin.endOfDirectory(HANDLE)
+    fin_listado(contenido)
 
 
 def listar_series(datos, accion, **extra):
@@ -430,6 +449,8 @@ def menu():
     carpeta("Mis favoritas", url(accion="favoritas"), "DefaultFavourites.png")
     carpeta("Mis listas", url(accion="listas"), "DefaultPlaylist.png")
     carpeta("Ajustes", url(accion="ajustes"), "DefaultAddonService.png")
+    carpeta("Actualizar Palantix  " + color("(versión %s)" % ADDON.getAddonInfo("version"), GRIS),
+            url(accion="actualizar"), "DefaultAddonsUpdates.png")
     xbmcplugin.endOfDirectory(HANDLE)
 
 
@@ -577,7 +598,7 @@ def seguir_viendo(t):
         hay = True
     if not hay:
         aviso("No hay capítulos pendientes: las series se apuntan solas al ver un capítulo")
-    xbmcplugin.endOfDirectory(HANDLE)
+    fin_listado("episodes")
 
 
 def a_medias():
@@ -601,7 +622,7 @@ def a_medias():
                                                 poster=d.get("poster", ""), fondo=d.get("fanart", "")), li, False)
     if not pelis:
         aviso("No tienes películas a medias")
-    xbmcplugin.endOfDirectory(HANDLE)
+    fin_listado("movies")
 
 
 def quitar_medias():
@@ -680,7 +701,7 @@ def temporadas(t):
         xbmcplugin.addDirectoryItem(HANDLE, url(accion="capitulos", s=temp["season_number"],
                                                 poster=s.get("poster_path") or "", fondo=s.get("backdrop_path") or "",
                                                 **comunes), li, True)
-    xbmcplugin.endOfDirectory(HANDLE)
+    fin_listado("seasons")
 
 
 def capitulos(t):
@@ -723,7 +744,7 @@ def capitulos(t):
                       poster=PARAMS.get("poster", ""), fondo=PARAMS.get("fondo", ""))
         li.addContextMenuItems([("Elegir fuente", "PlayMedia(%s&elegir=1)" % destino)])
         xbmcplugin.addDirectoryItem(HANDLE, destino, li, False)
-    xbmcplugin.endOfDirectory(HANDLE)
+    fin_listado("episodes")
 
 
 def favoritas():
@@ -947,6 +968,7 @@ SIN_TMDB = {
     "trailer": trailer,
     "ajustes": ADDON.openSettings,
     "tmdb_clave": comprobar_tmdb,
+    "actualizar": lambda: buscar_actualizacion(),
 }
 
 
@@ -991,9 +1013,41 @@ def con_tmdb(t, accion, page):
         capitulos(t)
 
 
+def buscar_actualizacion():
+    local = ADDON.getAddonInfo("version")
+    try:
+        remota = actualizar.version_remota()
+    except Exception as e:
+        return xbmcgui.Dialog().ok("Palantix", "No se pudo comprobar si hay versión nueva (¿hay Internet?).\n%s" % e)
+    if not actualizar.hay_nueva(local, remota):
+        return xbmcgui.Dialog().ok("Palantix", "Ya tienes la última versión: %s" % local)
+    actualizar.pedir_a_kodi(log)
+    xbmcgui.Dialog().ok("Palantix", "Hay versión nueva: %s (tienes la %s).\n"
+                        "Se está instalando sola; en un minuto vuelve a abrir Palantix." % (remota, local))
+
+
+def abrir_inicio():
+    """Pantalla de inicio estilo plataforma. Se cierra el listado vacío y se abre la ventana encima."""
+    xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+    t = api(obligatoria=True)
+    try:
+        tk = trakt.Trakt(AJ, log=log).encendido()
+    except Exception:
+        tk = False
+    try:
+        inicio.abrir(ADDON, PERFIL, t, url, favoritas=leer_favoritas(), con_trakt=tk, log=log)
+    except Exception as e:  # si la pantalla nueva fallase en alguna tele, que no te quedes sin Palantix
+        log("Inicio falló, abro el menú clásico: %s" % e)
+        xbmc.executebuiltin("Container.Update(%s)" % url(accion="clasico"))
+
+
 def main():
     accion = PARAMS.get("accion")
     if not accion:
+        if ADDON.getSetting("inicio_plataforma") != "false":
+            return abrir_inicio()
+        return menu()
+    if accion == "clasico":
         return menu()
     if accion in SIN_TMDB:
         return SIN_TMDB[accion]()

@@ -40,7 +40,7 @@ json.dump([
 # ---------------------------------------------------------------- Kodi simulado
 AJUSTES = {"tmdb_key": "clave-prueba", "lista_1": LISTA_JSON, "lista_2": LISTA_M3U, "lista_3": LISTA_SERIES,
            "cache_min": "60", "prov_archive_org": "false", "prov_listas": "true",
-           "idioma_pref": "0", "calidad_max": "0", "solo_idioma": "false", "autoplay": "false"}
+           "idioma_pref": "0", "calidad_max": "0", "solo_idioma": "false", "autoplay": "false", "inicio_plataforma": "false"}
 TMDB_FALSO = {
     "/discover/movie": {"page": 1, "total_pages": 3, "results": [{"id": 1, "title": "Peli A", "release_date": "2001-01-01"}]},
     "/search/tv": {"page": 1, "total_pages": 1, "results": [
@@ -109,7 +109,7 @@ def _mod(nombre, **attrs):
 
 
 _mod("xbmc", LOGINFO=1, log=lambda m, l=0: print("   LOG", m),
-     executebuiltin=lambda c: REGISTRO["builtin"].append(c), sleep=lambda ms: None, Player=_Player, getInfoLabel=lambda k: "",
+     executebuiltin=lambda c: REGISTRO["builtin"].append(c), sleep=lambda ms: None, Player=_Player, getInfoLabel=lambda k: "", getSkinDir=lambda: "skin.estuary",
      Monitor=lambda: types.SimpleNamespace(abortRequested=lambda: True, waitForAbort=lambda s: True), getCondVisibility=lambda c: False)
 _mod("xbmcvfs", translatePath=lambda p: TMP)
 _mod("xbmcaddon", Addon=lambda: types.SimpleNamespace(
@@ -123,7 +123,7 @@ _mod("xbmcgui", ListItem=ListItem, NOTIFICATION_INFO=0, Window=_Ventana,
 _mod("xbmcplugin", SORT_METHOD_LABEL=1, SORT_METHOD_VIDEO_YEAR=2, SORT_METHOD_UNSORTED=0,
      addDirectoryItem=lambda h, u, li, isFolder=False: REGISTRO["items"].append((li.label, u)),
      addDirectoryItems=lambda h, its, n=0: REGISTRO["items"].extend((li.label, u) for u, li, _ in its),
-     endOfDirectory=lambda h, succeeded=True: None, setContent=lambda h, c: None,
+     endOfDirectory=lambda h, succeeded=True, cacheToDisc=True: REGISTRO.__setitem__("fin", succeeded), setContent=lambda h, c: None,
      addSortMethod=lambda h, m: None,
      setResolvedUrl=lambda h, ok, li: (REGISTRO.__setitem__("resuelto", (ok, li.path)), REGISTRO.__setitem__("li", li)))
 
@@ -152,7 +152,7 @@ def comprobar(nombre, cond):
 from urllib.parse import urlencode  # noqa: E402
 
 r = abrir("")
-comprobar("menú principal: Películas, Series, Continuar viendo, Seguimiento, Favoritas, Listas, Ajustes", len(r["items"]) == 7)
+comprobar("menú principal: Películas, Series, Continuar viendo, Seguimiento, Favoritas, Listas, Ajustes, Actualizar", len(r["items"]) == 8)
 
 r = abrir("?accion=listas")
 comprobar("Mis listas muestra las 3 listas", len(r["items"]) == 3)

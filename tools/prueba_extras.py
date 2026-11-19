@@ -176,5 +176,55 @@ comprobar("intro: no salta en películas", intro.Detector(TMP, {"tipo": "pelicul
 intro.aprender(TMP, 100, 64, 157)
 comprobar("intro: un segundo salto parecido afina la media", intro.leer(TMP)["100"] == {"inicio": 62.0, "fin": 155.0, "veces": 2})
 
+# ---------------------------------------------------------------- pantalla de inicio (filas)
+from resources.lib import inicio, progreso as pg, seguimiento as sg, novedades as nv  # noqa: E402
+from urllib.parse import urlencode  # noqa: E402
+
+PERF = tempfile.mkdtemp(prefix="palantix_inicio_")
+url = lambda **kw: "plugin://plugin.video.palantix/?" + urlencode(kw)
+
+
+class TFalso:
+    idioma = "es-ES"
+    llamadas = 0
+
+    def _r(self, n):
+        TFalso.llamadas += 1
+        return {"results": [{"id": n + i, "title": "Peli %d" % (n + i), "name": "Serie %d" % (n + i),
+                             "release_date": "2025-05-01", "first_air_date": "2024-01-01", "vote_average": 7.8,
+                             "poster_path": "/p%d.jpg" % i, "backdrop_path": "/f%d.jpg" % i, "overview": "Sinopsis"}
+                            for i in range(25)]}
+
+    def tendencias(self, p): return self._r(1000)
+    def s_tendencias(self, p): return self._r(2000)
+    def en_cines(self, p): return self._r(3000)
+    def mejor_valoradas(self, p): return self._r(4000)
+
+
+pg.apuntar(PERF, {"tipo": "pelicula", "tmdb": 653, "titulo": "Nosferatu", "anio": 1922, "fanart": "/n.jpg"}, 1200, 5640)
+sg.marcar_visto(PERF, {"tipo": "episodio", "tmdb": 100, "s": 1, "e": 1, "titulo": "Ficción", "poster": "/s.jpg"})
+sg.marcar_visto(PERF, {"tipo": "episodio", "tmdb": 200, "s": 2, "e": 3, "titulo": "Otra"})
+nv._guardar(PERF, {"100": {"pendientes": 2, "nuevo": True, "siguiente": {"s": 1, "e": 2, "nombre": "Dos", "still": "/st.jpg"}},
+                   "200": {"pendientes": 1, "nuevo": False, "siguiente": {"s": 2, "e": 4, "nombre": "Cuatro"}}})
+filas = inicio.datos_filas(PERF, TFalso(), url, favoritas=[{"id": 9, "title": "Favorita", "release_date": "2000-01-01"}])
+comprobar("inicio: «Continuar viendo» con la peli a medias y la serie sin novedad",
+          [e["label"] for e in filas[101]] == ["Nosferatu", "Otra"] and filas[101][0]["resume"] == (1200, 5640))
+comprobar("inicio: «Nuevos capítulos» con la serie que tiene NUEVO", [e["label"] for e in filas[102]] == ["Ficción"]
+          and filas[102][0]["nuevo"] == "1" and "e=2" in filas[102][0]["url"])
+comprobar("inicio: filas del catálogo con 20 carátulas cada una", all(len(filas[f]) == 20 for f in (103, 104, 105, 106)))
+comprobar("inicio: película = reproducir, serie = abrir temporadas",
+          filas[103][0]["tipo"] == "reproducir" and "accion=reproducir" in filas[103][0]["url"]
+          and filas[104][0]["tipo"] == "carpeta" and "accion=temporadas" in filas[104][0]["url"])
+comprobar("inicio: línea de información «2025 · ★ 7.8 · Película»", filas[103][0]["info"] == "2025   ·   ★ 7.8   ·   Película")
+comprobar("inicio: Mi lista con las favoritas", [e["label"] for e in filas[107]] == ["Favorita"])
+antes = TFalso.llamadas
+inicio.datos_filas(PERF, TFalso(), url)
+comprobar("inicio: la segunda vez abre al instante (catálogo en caché, sin pedir a TMDB)", TFalso.llamadas == antes)
+filas = inicio.datos_filas(tempfile.mkdtemp(), None, url)
+comprobar("inicio: sin clave de TMDB no se rompe (filas vacías)", all(v == [] for v in filas.values()))
+comprobar("inicio: menú lateral con Buscar, Películas, Series... y Menú clásico",
+          [m[0] for m in inicio.menu(url)] == ["Inicio", "Buscar", "Películas", "Series", "Mis series", "Mi lista",
+                                                "Mis listas", "Ajustes", "Actualizar", "Menú clásico"])
+
 print("\n%s" % ("TODO CORRECTO" if not fallos else "%d FALLOS" % fallos))
 sys.exit(1 if fallos else 0)

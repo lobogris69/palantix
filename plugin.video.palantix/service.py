@@ -161,17 +161,36 @@ def comprobar_novedades():
         log("Novedades: %s" % e)
 
 
+def actualizar_solo():
+    """Si hay versión nueva de Palantix, avisa y pide a Kodi que la instale ya (sin esperar al día siguiente)."""
+    addon = xbmcaddon.Addon()
+    if addon.getSetting("auto_actualizar") == "false":
+        return
+    try:
+        from resources.lib import actualizar
+        local, remota = addon.getAddonInfo("version"), actualizar.version_remota()
+        if actualizar.hay_nueva(local, remota):
+            xbmcgui.Dialog().notification("Palantix", "Actualizando a la versión %s..." % remota,
+                                          addon.getAddonInfo("icon"), 8000)
+            actualizar.pedir_a_kodi(log)
+    except Exception as e:
+        log("Actualización: %s" % e)
+
+
 def main():
     monitor = xbmc.Monitor()
     reproductor = Reproductor()
     log("Arrancado")
     if not monitor.waitForAbort(20):  # dejamos que Kodi termine de arrancar
+        actualizar_solo()
         avisar_caducidad()
     segundos = 0
     while not monitor.abortRequested():
         reproductor.vigilar()
         if segundos % (6 * 3600) == 40 and not reproductor.isPlayingVideo():  # al arrancar y cada 6 h
             comprobar_novedades()
+            if segundos > 40:
+                actualizar_solo()
         segundos += 1
         if monitor.waitForAbort(1):
             break
