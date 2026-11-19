@@ -19,7 +19,10 @@
         <setting id="color_etiquetas" type="enum" label="Color de las etiquetas" values="Sin color|Dorado|Azul|Verde|Naranja|Violeta|Blanco" default="1"/>
     </category>
     <category label="Reproducción">
-        <setting id="idioma_pref" type="enum" label="Idioma preferido" values="Castellano|Latino|VOSE|Versión original|Me da igual" default="0"/>
+        <setting id="idioma_pref" type="enum" label="Idioma preferido (cuando no hay un orden personalizado)" values="Castellano|Latino|VOSE|Versión original|Me da igual" default="0"/>
+        <setting id="orden_fuentes" type="enum" label="Orden de fuentes" values="Idioma primero|Calidad primero" default="0"/>
+        <setting type="action" label="Ordenar prioridad de idiomas" action="RunPlugin(plugin://plugin.video.palantix/?accion=orden_idiomas)"/>
+        <setting id="prioridad_idiomas" type="text" label="" default="" visible="false"/>
         <setting id="solo_idioma" type="bool" label="Ocultar fuentes en otros idiomas" default="false"/>
         <setting id="calidad_max" type="enum" label="Calidad máxima (baja si tu conexión es lenta)" values="4K|1080p|720p" default="0"/>
         <setting id="autoplay" type="bool" label="Reproducción automática (elige la mejor fuente sin preguntar)" default="false"/>

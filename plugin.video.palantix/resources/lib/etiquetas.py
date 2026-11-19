@@ -59,7 +59,8 @@ def _nota_idioma(idiomas, preferido):
     return 0      # otro idioma
 
 
-def ordenar(fuentes, idioma="", calidad_max="4K", solo_idioma=False):
+def ordenar(fuentes, idioma="", calidad_max="4K", solo_idioma=False,
+            prioridad_idiomas=(), calidad_primero=False):
     """Devuelve [(fuente, analisis)] de mejor a peor. Las CAM van siempre al final."""
     tope = _RANGO.get(calidad_max, 4)
     salida = []
@@ -68,14 +69,17 @@ def ordenar(fuentes, idioma="", calidad_max="4K", solo_idioma=False):
         nota_idioma = _nota_idioma(a["idiomas"], idioma)
         if solo_idioma and idioma and nota_idioma == 0:
             continue
-        rango = _RANGO.get(a["calidad"], 2)
-        clave = (
-            "CAM" not in a["extras"],     # 1º fuera las grabadas en el cine
-            nota_idioma,                  # 2º el idioma preferido
-            rango <= tope,                # 3º que no pase de la calidad máxima (conexión lenta)
-            rango,                        # 4º la mejor calidad dentro del tope
-            "HDR" in a["extras"] or "DV" in a["extras"],
-        )
+        if prioridad_idiomas:
+            nota_idioma = max(
+                (len(prioridad_idiomas) + 2 - n for n, codigo in enumerate(prioridad_idiomas)
+                 if codigo in a["idiomas"]),
+                default=2 if nota_idioma == 2 else int(bool(a["idiomas"])),
+            )
+        rango = _RANGO.get(a["calidad"], 0 if calidad_primero else 2)
+        calidad = (rango <= tope, rango)
+        prioridades = (*calidad, nota_idioma) if calidad_primero else (nota_idioma, *calidad)
+        clave = ("CAM" not in a["extras"], *prioridades,
+                 "HDR" in a["extras"] or "DV" in a["extras"])
         salida.append((clave, f, a))
     salida.sort(key=lambda x: x[0], reverse=True)
     return [(f, a) for _, f, a in salida]

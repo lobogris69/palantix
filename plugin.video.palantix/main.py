@@ -920,15 +920,51 @@ def trailer():
 
 
 # ---------------------------------------------------------------- reproducción
-IDIOMAS_AJUSTE = ["CAST", "LAT", "VOSE", "VO", ""]
+IDIOMAS_PRIORIDAD = {
+    "CAST": "Castellano",
+    "LAT": "Latino",
+    "VOSE": "Versión original subtitulada",
+    "VO": "Versión original",
+}
+IDIOMAS_AJUSTE = list(IDIOMAS_PRIORIDAD) + [""]
+ORDENES_FUENTES = ("Idioma primero", "Calidad primero")
 CALIDADES_AJUSTE = ["4K", "1080p", "720p"]
+
+
+def configurar_prioridad_idiomas():
+    dialogo = xbmcgui.Dialog()
+    accion = dialogo.select("Prioridad de idiomas", ["Elegir orden", "Usar idioma preferido"])
+    if accion == 1:
+        ADDON.setSetting("prioridad_idiomas", "")
+        return
+    if accion != 0:
+        return
+
+    pendientes = list(IDIOMAS_PRIORIDAD)
+    prioridad = []
+    while len(pendientes) > 1:
+        opciones = [IDIOMAS_PRIORIDAD[codigo] for codigo in pendientes]
+        n = dialogo.select("Idioma en el puesto %d" % (len(prioridad) + 1), opciones)
+        if n < 0:
+            return
+        prioridad.append(pendientes.pop(n))
+    prioridad.extend(pendientes)
+    ADDON.setSetting("prioridad_idiomas", ",".join(prioridad))
+    aviso(" → ".join(IDIOMAS_PRIORIDAD[codigo] for codigo in prioridad))
 
 
 def preferencias():
     i = ajuste_int("idioma_pref", 0)
     c = ajuste_int("calidad_max", 0)
+    prioridad = tuple(dict.fromkeys(
+        codigo for codigo in ADDON.getSetting("prioridad_idiomas").split(",")
+        if codigo in IDIOMAS_PRIORIDAD
+    ))
+    idioma = prioridad[0] if prioridad else (IDIOMAS_AJUSTE[i] if 0 <= i < len(IDIOMAS_AJUSTE) else "")
     return {
-        "idioma": IDIOMAS_AJUSTE[i] if 0 <= i < len(IDIOMAS_AJUSTE) else "",
+        "idioma": idioma,
+        "prioridad_idiomas": prioridad,
+        "calidad_primero": ajuste_int("orden_fuentes", 0) == 1,
         "calidad_max": CALIDADES_AJUSTE[c] if 0 <= c < len(CALIDADES_AJUSTE) else "4K",
         "solo_idioma": ADDON.getSetting("solo_idioma") == "true",
     }
@@ -993,7 +1029,7 @@ def reproducir():
     else:
         textos = ["%s  %s · %s" % (marcas_visibles(a) or etiquetas.texto_etiquetas(a), f.proveedor, f.etiqueta)
                   for f, a in ordenadas]
-        n = xbmcgui.Dialog().select("Elige fuente (la mejor arriba)", textos)
+        n = xbmcgui.Dialog().select("Elige fuente · " + ORDENES_FUENTES[pref["calidad_primero"]], textos)
         if n < 0:
             return no_reproducir()
         candidatas = [ordenadas[n]]
@@ -1103,6 +1139,7 @@ SIN_TMDB = {
     "quitar_medias": quitar_medias,
     "trailer": trailer,
     "ajustes": ADDON.openSettings,
+    "orden_idiomas": configurar_prioridad_idiomas,
     "tmdb_clave": comprobar_tmdb,
     "actualizar": lambda: buscar_actualizacion(),
     "lista_nueva": lambda: lista_nueva(),
