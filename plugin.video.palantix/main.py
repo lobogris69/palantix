@@ -15,6 +15,7 @@ from resources.lib import etiquetas, listas
 from resources.lib import actualizar, debrid, inicio, mislistas, novedades, progreso, seguimiento, subtitulos, trakt
 from resources.lib import tmdb as tmdb_mod
 from resources.lib.providers import ListaURL, Peli, buscar_fuentes
+from resources.lib.providers.stremio import Stremio
 
 ADDON = xbmcaddon.Addon()
 BASE = sys.argv[0]
@@ -234,23 +235,29 @@ def _elegir_fichero(videos):
     return xbmcgui.Dialog().select("Elige fichero", ["%s (%.1f GB)" % (v[0], v[1] / 1e9) for v in videos])
 
 
-def resolver(enlace, avisar=True):
+def resolver(enlace, avisar=True, elegir=_elegir_fichero, privada=False):
     """Devuelve la URL final reproducible, o None si no se pudo (avisa si `avisar`)."""
-    servicios = debrid.activos(AJ, **_kw())
+    opciones = _kw()
+    if privada:
+        opciones["log"] = lambda _: None
+    servicios = debrid.activos(AJ, **opciones)
     progreso = None
     try:
         if servicios and (enlace.startswith("magnet:") or any(s.admite(enlace) for s in servicios)):
             progreso = xbmcgui.DialogProgress()
             progreso.create("Palantix", "Pidiendo el enlace al servicio Debrid...")
-        return debrid.resolver(enlace, servicios, elegir=_elegir_fichero,
-                               cancelado=progreso.iscanceled if progreso else (lambda: False), log=log)
+        return debrid.resolver(enlace, servicios, elegir=elegir,
+                               cancelado=progreso.iscanceled if progreso else (lambda: False),
+                               log=opciones["log"])
     except (debrid.DebridError, debrid.NoListo) as e:
-        log("Debrid: %s" % e)
+        if not privada:
+            log("Debrid: %s" % e)
         if avisar:
-            aviso(str(e))
+            aviso("No se pudo resolver la fuente de Stremio" if privada else str(e))
         return None
     except Exception as e:
-        log("Debrid fallo inesperado: %s" % e)
+        if not privada:
+            log("Debrid fallo inesperado: %s" % e)
         if avisar:
             aviso("El servicio Debrid no responde")
         return None
@@ -956,6 +963,21 @@ def reproducir():
     extra = []
     if activo("listas") and any(origenes_listas()):
         extra.append(ListaURL(origenes_listas(), CACHE, ttl_listas(), log))
+    if ADDON.getSetting("prov_stremio") == "true":
+        complementos = []
+        for n in range(1, 4):
+            origen = ADDON.getSetting("stremio_%d" % n).strip()
+            if origen:
+                complementos.append(Stremio(origen, n, log))
+        if complementos:
+            try:
+                t = api(obligatoria=False)
+                if t:
+                    peli.imdb_id = t.imdb_id(peli.tmdb_id, "tv" if episodio else "movie")
+            except Exception:
+                log("[Palantix] No se pudo obtener el identificador IMDb")
+            if peli.imdb_id:
+                extra.extend(complementos)
     fuentes = buscar_fuentes(peli, activo=activo, log=log, extra=extra)
     barra.close()
 
@@ -978,15 +1000,25 @@ def reproducir():
 
     for i, (f, a) in enumerate(candidatas):
         ultima = i == len(candidatas) - 1
-        ruta = resolver(f.url, avisar=ultima)
+        def elegir(videos):
+            if f.archivo:
+                coincidencias = [n for n, v in enumerate(videos)
+                                 if v[0].replace("\\", "/").rsplit("/", 1)[-1] == f.archivo]
+                if len(coincidencias) == 1:
+                    return coincidencias[0]
+            return _elegir_fichero(videos)
+
+        ruta = resolver(f.url, avisar=ultima, elegir=elegir, privada=f.privada)
         if not ruta:
-            log("Fuente descartada: %s" % f.etiqueta)
+            if not f.privada:
+                log("Fuente descartada: %s" % f.etiqueta)
             continue
         if f.cabeceras:  # convención de Kodi para mandar cabeceras HTTP
             ruta += "|" + urlencode(f.cabeceras)
         if automatico and len(candidatas) > 1:
             aviso("%s %s" % (etiquetas.texto_etiquetas(a), f.proveedor))
-        log("Reproduciendo %s" % f.url)
+        if not f.privada:
+            log("Reproduciendo %s" % f.url)
         avisar_al_servicio(peli)
         li = xbmcgui.ListItem(path=ruta)
         if desde:
