@@ -81,10 +81,10 @@
     </category>
     <category label="Trakt">
         <setting id="trakt_activo" type="bool" label="Usar Trakt (visto automático, pendientes y listas)" default="false"/>
-        <setting type="lsep" label="1) Introduce el Client ID de la app en developer.trakt.tv/apps"/>
-        <setting id="trakt_client_id" type="text" label="Client ID" default=""/>
+        <setting type="lsep" label="Palantix ya incluye un Client ID para usuarios de prueba"/>
+        <setting id="trakt_client_id" type="text" label="Client ID propio (opcional)" default=""/>
         <setting id="trakt_client_secret" type="text" label="Client Secret (opcional, para apps antiguas)" default="" option="hidden"/>
-        <setting type="action" label="2) Vincular con un código en pantalla" action="RunPlugin(plugin://plugin.video.palantix/?accion=vincular&amp;s=trakt)"/>
+        <setting type="action" label="Vincular con un código en pantalla" action="RunPlugin(plugin://plugin.video.palantix/?accion=vincular&amp;s=trakt)"/>
         <setting type="action" label="Ver mi cuenta" action="RunPlugin(plugin://plugin.video.palantix/?accion=cuenta&amp;s=trakt)"/>
         <setting id="trakt_listas_auto" type="bool" label="Añadir mis listas personales al menú principal" default="true"/>
         <setting id="trakt_valorar" type="enum" label="Preguntar qué te ha parecido al terminar" values="Nunca|A veces|Siempre" default="1"/>

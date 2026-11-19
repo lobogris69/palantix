@@ -48,8 +48,9 @@ A partir de ahí las versiones nuevas llegan solas.
 - Aviso cuando a una cuenta le quedan 7 días o menos.
 
 **Trakt** (Ajustes > Trakt)
-- Registra una aplicación **Development** en [Trakt Developer](https://developer.trakt.tv/apps) y añade a tus usuarios de prueba.
-  Introduce el **Client ID** en Ajustes → Trakt y vincula cada cuenta con el código en pantalla.
+- En Ajustes → Trakt, pulsa **Vincular con un código en pantalla** y autoriza tu cuenta. El Client ID incluido
+  corresponde a la aplicación Development de Palantix, disponible para sus usuarios de prueba.
+  Si usas tu propia aplicación, puedes indicar su Client ID en el mismo menú.
 - Lo que ves se marca solo en tu Trakt (a partir del 80 %).
 - Menú Trakt: películas y series pendientes y tus listas personales (también directamente en el menú principal).
 - Al terminar te pregunta qué te ha parecido (nunca / a veces / siempre) y guarda la nota en Trakt.

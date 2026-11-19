@@ -12,6 +12,7 @@ import urllib.request
 from . import ganchos
 
 API = "https://api.trakt.tv"
+CLIENT_ID_PALANTIX = "W6qEUdrilK5ucvZgQOEViv2VbkjASxcgergDvXu_6Co"
 REDIRECT = "urn:ietf:wg:oauth:2.0:oob"
 NOTAS = ["10 · Obra maestra", "9 · Excelente", "8 · Muy buena", "7 · Buena", "6 · Está bien", "5 · Regular",
          "4 · Flojita", "3 · Mala", "2 · Muy mala", "1 · Horrible"]
@@ -28,8 +29,11 @@ class Trakt:
         self.aj, self.log = ajustes, log
 
     # ------------------------------------------------------------ estado
+    def client_id(self):
+        return self.aj.get("trakt_client_id").strip() or CLIENT_ID_PALANTIX
+
     def configurado(self):
-        return bool(self.aj.get("trakt_client_id"))
+        return bool(self.client_id())
 
     def vinculado(self):
         return bool(self.aj.get("trakt_token"))
@@ -44,7 +48,7 @@ class Trakt:
         if auth and self.aj.get("trakt_refresh") and float(self.aj.get("trakt_caduca") or 0) < time.time() + 3600:
             self._renovar()
         cab = {"Content-Type": "application/json", "trakt-api-version": "2",
-               "trakt-api-key": self.aj.get("trakt_client_id"), "User-Agent": "Palantix/0.3"}
+               "trakt-api-key": self.client_id(), "User-Agent": "Palantix/0.3"}
         if auth and self.aj.get("trakt_token"):
             cab["Authorization"] = "Bearer " + self.aj.get("trakt_token")
         datos = json.dumps(cuerpo).encode() if cuerpo is not None else None
@@ -75,9 +79,9 @@ class Trakt:
         self.aj.set("trakt_caduca", str(int(r.get("created_at", time.time())) + int(r.get("expires_in", 7776000))))
 
     def _credenciales_oauth(self):
-        datos = {"client_id": self.aj.get("trakt_client_id")}
+        datos = {"client_id": self.client_id()}
         secreto = self.aj.get("trakt_client_secret")
-        if secreto:
+        if secreto and self.aj.get("trakt_client_id").strip():
             datos["client_secret"] = secreto
         return datos
 
@@ -92,7 +96,7 @@ class Trakt:
 
     # ------------------------------------------------------------ vinculación (misma forma que los Debrid)
     def iniciar_pin(self):
-        cod, d = self._pedir("POST", "/oauth/device/code", {"client_id": self.aj.get("trakt_client_id")}, auth=False)
+        cod, d = self._pedir("POST", "/oauth/device/code", {"client_id": self.client_id()}, auth=False)
         if cod >= 400 or "user_code" not in d:
             raise TraktError("Trakt no reconoce tu Client ID: revisa Ajustes > Trakt")
         return {"url": d.get("verification_url", "https://trakt.tv/activate"), "codigo": d["user_code"],
