@@ -565,6 +565,27 @@ def sagas_buscar(t):
     xbmcplugin.endOfDirectory(HANDLE)
 
 
+def fuentes_episodios(sid, datos, capitulos):
+    """Encola capítulos emitidos y devuelve los que ya tienen fuente confirmada."""
+    if not capitulos or ADDON.getSetting("comprobar_fuentes_episodios") != "true":
+        return set(), False
+
+    _, proveedores = consulta_fuentes(None)
+    configuracion = (proveedores, preferencias(), "episodios")
+    confirmados, pendientes = set(), False
+    for i in range(0, len(capitulos), 400):
+        fichas = [
+            {"id": "%s:%d:%d" % (sid, s, e), "tmdb_id": int(sid), "temporada": s, "episodio": e,
+             "title": datos.get("titulo") or "", "original_title": datos.get("original") or "",
+             "release_date": str(datos.get("anio") or "")}
+            for s, e in capitulos[i:i + 400]
+        ]
+        visibles, en_cola = disponibilidad.filtrar(fichas, CACHE, configuracion)
+        confirmados.update((f["temporada"], f["episodio"]) for f in visibles)
+        pendientes = pendientes or en_cola
+    return confirmados, pendientes
+
+
 def seguir_viendo(t):
     """Series en seguimiento: primero las que tienen capítulos NUEVOS, luego pendientes y al final las que están al día."""
     if t:
@@ -601,6 +622,18 @@ def seguir_viendo(t):
             li = xbmcgui.ListItem("%s  %s" % (d["titulo"], color("al día · " + cola, GRIS)))
             destino, es_carpeta = url(accion="temporadas", **comun), True
             texto = "Has visto hasta el %sx%02d.\nEstado: %s." % (d["s"], int(d["e"]), cola)
+        confirmados, en_cola = fuentes_episodios(sid, d, n.get("episodios_pendientes", []))
+        if confirmados:
+            distintivo = "%d con fuente" % len(confirmados)
+        elif en_cola:
+            distintivo = "Comprobando fuentes"
+        elif sig and n.get("episodios_pendientes") and ADDON.getSetting("comprobar_fuentes_episodios") == "true":
+            distintivo = "Sin fuente confirmada"
+        else:
+            distintivo = ""
+        if distintivo:
+            li.setLabel("%s  %s" % (li.getLabel(), color(distintivo, VERDE if confirmados else GRIS)))
+            texto = distintivo + "\n" + texto
         tag = li.getVideoInfoTag()
         tag.setMediaType("episode" if sig else "tvshow")
         tag.setTvShowTitle(d.get("titulo", ""))
@@ -613,8 +646,14 @@ def seguir_viendo(t):
         li.setArt({"poster": tmdb_mod.TMDB.imagen(d.get("poster")),
                    "thumb": tmdb_mod.TMDB.imagen((sig or {}).get("still"), "w500") or tmdb_mod.TMDB.imagen(d.get("fanart"), "w780"),
                    "fanart": tmdb_mod.TMDB.imagen(d.get("fanart"), "w1280")})
-        li.addContextMenuItems([("Ver temporadas", "Container.Update(%s)" % url(accion="temporadas", **comun)),
-                                ("Quitar de seguimiento", "RunPlugin(%s)" % url(accion="dejar_seguir", id=sid))])
+        acciones = [("Ver temporadas", "Container.Update(%s)" % url(accion="temporadas", **comun)),
+                    ("Quitar de seguimiento", "RunPlugin(%s)" % url(accion="dejar_seguir", id=sid))]
+        if confirmados and sig and (sig["s"], sig["e"]) not in confirmados:
+            s_disp, e_disp = min(confirmados)
+            reproducible = url(accion="reproducir", tipo="episodio", s=s_disp, e=e_disp,
+                              poster=d.get("poster", ""), fondo=d.get("fanart", ""), **comun)
+            acciones.insert(0, ("Ver %dx%02d con fuente" % (s_disp, e_disp), "PlayMedia(%s)" % reproducible))
+        li.addContextMenuItems(acciones)
         xbmcplugin.addDirectoryItem(HANDLE, destino, li, es_carpeta)
         hay = True
     if not hay:
@@ -737,16 +776,25 @@ def capitulos(t):
     serie = PARAMS.get("titulo", "")
     hoy = time.strftime("%Y-%m-%d")
     seg = mis_series().get(str(PARAMS["id"])) or {}
-    visto_hasta = (int(seg.get("s") or 0), int(seg.get("e") or 0))
     visto_dia = time.strftime("%Y-%m-%d", time.localtime(seg["fecha"])) if seg.get("fecha") else ""
-    for ep in temp.get("episodes", []):
+    episodios = temp.get("episodes", [])
+    emitidos = [(ep["season_number"], ep["episode_number"]) for ep in episodios
+                if ep.get("air_date") and ep["air_date"] <= hoy
+                and not seguimiento.esta_visto(seg, ep["season_number"], ep["episode_number"])]
+    confirmados, _ = fuentes_episodios(PARAMS["id"], PARAMS, emitidos)
+    for ep in episodios:
         emitido = ep.get("air_date") or ""
         n_s, n_e = ep["season_number"], ep["episode_number"]
+        visto = seguimiento.esta_visto(seg, n_s, n_e)
         nombre = "%dx%02d. %s" % (n_s, n_e, ep.get("name") or "")
         if not emitido or emitido > hoy:
             nombre = color("%s (sale el %s)" % (nombre, fecha_es(emitido) or "?"), GRIS)
-        elif seg and (n_s, n_e) > visto_hasta and emitido > visto_dia:
+        elif seg and not visto and emitido > visto_dia:
             nombre = "%s  %s" % (nombre, color("● NUEVO", VERDE))
+        if visto:
+            nombre += "  " + color("✓ VISTO", VERDE)
+        elif (n_s, n_e) in confirmados:
+            nombre += "  " + color("Con fuente", VERDE)
         li = xbmcgui.ListItem(nombre)
         li.setArt({"thumb": tmdb_mod.TMDB.imagen(ep.get("still_path"), "w300"),
                    "poster": tmdb_mod.TMDB.imagen(temp.get("poster_path"))})
@@ -760,7 +808,7 @@ def capitulos(t):
         tag.setFirstAired(emitido)
         if ep.get("runtime"):
             tag.setDuration(int(ep["runtime"]) * 60)
-        if seg and (n_s, n_e) <= visto_hasta:
+        if visto:
             tag.setPlaycount(1)  # marca de visto
         prog = mi_progreso().get("e:%s:%s:%s" % (PARAMS["id"], n_s, n_e))
         if prog:
@@ -769,9 +817,24 @@ def capitulos(t):
         destino = url(accion="reproducir", tipo="episodio", id=PARAMS["id"], titulo=serie,
                       original=PARAMS.get("original", ""), anio=PARAMS.get("anio", ""), s=n_s, e=n_e,
                       poster=PARAMS.get("poster", ""), fondo=PARAMS.get("fondo", ""))
-        li.addContextMenuItems([("Elegir fuente", "PlayMedia(%s&elegir=1)" % destino)])
+        acciones = [("Elegir fuente", "PlayMedia(%s&elegir=1)" % destino)]
+        if emitido and emitido <= hoy:
+            cambio = "Marcar como no visto" if visto else "Marcar como visto"
+            accion = url(accion="marcar_capitulo", id=PARAMS["id"], s=n_s, e=n_e, visto=int(not visto),
+                         titulo=serie, original=PARAMS.get("original", ""), anio=PARAMS.get("anio", ""),
+                         poster=PARAMS.get("poster", ""), fondo=PARAMS.get("fondo", ""))
+            acciones.append((cambio, "RunPlugin(%s)" % accion))
+        li.addContextMenuItems(acciones)
         xbmcplugin.addDirectoryItem(HANDLE, destino, li, False)
     fin_listado("episodes")
+
+
+def marcar_capitulo():
+    meta = {"tipo": "episodio", "tmdb": PARAMS["id"], "s": int(PARAMS["s"]), "e": int(PARAMS["e"]),
+            "titulo": PARAMS.get("titulo"), "original": PARAMS.get("original"), "anio": PARAMS.get("anio"),
+            "poster": PARAMS.get("poster"), "fanart": PARAMS.get("fondo")}
+    seguimiento.marcar_visto(PERFIL, meta, visto=PARAMS["visto"] == "1")
+    xbmc.executebuiltin("Container.Refresh")
 
 
 def favoritas():
@@ -1128,6 +1191,7 @@ SIN_TMDB = {
     "listas": mis_listas,
     "anios": lambda: anios(PARAMS["destino"]),
     "dejar_seguir": dejar_seguir,
+    "marcar_capitulo": marcar_capitulo,
     "a_medias": a_medias,
     "trakt": menu_trakt,
     "quitar_medias": quitar_medias,

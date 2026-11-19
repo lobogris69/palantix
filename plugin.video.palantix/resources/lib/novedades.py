@@ -1,6 +1,6 @@
 """Novedades de las series en seguimiento: capítulos pendientes y capítulos NUEVOS.
 
-- pendientes: capítulos ya emitidos que van después del último que viste.
+- pendientes: capítulos ya emitidos que quedan por ver.
 - nuevo: ha salido algún capítulo DESPUÉS de la última vez que viste la serie.
 Se guarda en novedades.json (caché de 6 h) para que los menús abran al instante;
 el servicio lo refresca solo y avisa cuando aparece un capítulo nuevo.
@@ -32,43 +32,36 @@ def _guardar(perfil, datos):
         json.dump(datos, f, ensure_ascii=False)
 
 
-def _antes(a, b):
-    return (a[0], a[1]) < (b[0], b[1])
-
-
-def estado(t, sid, s, e, fecha_visto):
-    """Calcula el estado de una serie para quien ha visto hasta SxE (en la fecha `fecha_visto`, epoch)."""
+def estado(t, sid, s, e, fecha_visto, historial=None):
+    """Calcula los capítulos emitidos que quedan pendientes, incluidos los saltados."""
     serie = t.serie(sid)
     ultimo = serie.get("last_episode_to_air") or {}
     prox = serie.get("next_episode_to_air") or {}
     ult = (int(ultimo.get("season_number") or 0), int(ultimo.get("episode_number") or 0))
     caps = {x["season_number"]: int(x.get("episode_count") or 0) for x in serie.get("seasons", []) if x["season_number"] > 0}
-
-    pendientes = 0
-    if ult[0] and _antes((s, e), ult):
-        for temp in range(max(s, 1), ult[0] + 1):
-            hasta = ult[1] if temp == ult[0] else caps.get(temp, 0)
-            desde = e if temp == s else 0
-            pendientes += max(0, hasta - desde)
+    historial = historial or {"s": s, "e": e}
+    restantes = []
+    for temp in range(1, ult[0] + 1):
+        hasta = ult[1] if temp == ult[0] else caps.get(temp, 0)
+        restantes.extend((temp, ep) for ep in range(1, hasta + 1) if not seguimiento.esta_visto(historial, temp, ep))
 
     siguiente = None
-    if pendientes:
-        for temp, desde in ((s, e), (s + 1, 0)):
-            try:
-                eps = t.temporada(sid, temp).get("episodes", [])
-            except Exception:
-                eps = []
-            cand = [x for x in sorted(eps, key=lambda x: x["episode_number"]) if x["episode_number"] > desde]
-            if cand:
-                x = cand[0]
-                siguiente = {"s": temp, "e": x["episode_number"], "nombre": x.get("name") or "",
-                             "still": x.get("still_path") or "", "emitido": x.get("air_date") or "",
-                             "sinopsis": x.get("overview") or ""}
-                break
+    if restantes:
+        temp, ep = restantes[0]
+        try:
+            episodios = t.temporada(sid, temp).get("episodes", [])
+        except Exception:
+            episodios = []
+        ficha = next((x for x in episodios if x["episode_number"] == ep), {})
+        siguiente = {"s": temp, "e": ep, "nombre": ficha.get("name") or "",
+                     "still": ficha.get("still_path") or "", "emitido": ficha.get("air_date") or "",
+                     "sinopsis": ficha.get("overview") or ""}
 
+    pendientes = len(restantes)
     visto_dia = time.strftime("%Y-%m-%d", time.localtime(fecha_visto or 0))
     return {
         "pendientes": pendientes,
+        "episodios_pendientes": restantes,
         "nuevo": bool(pendientes and (ultimo.get("air_date") or "") > visto_dia),
         "ultimo": {"s": ult[0], "e": ult[1], "emitido": ultimo.get("air_date") or ""},
         "proximo": {"s": prox.get("season_number"), "e": prox.get("episode_number"), "emitido": prox.get("air_date")}
@@ -87,15 +80,16 @@ def refrescar(perfil, t, forzar=False, log=print):
     recien = []
     for sid, d in seguimiento.ordenadas(perfil):
         previo = antes.get(sid)
+        revision = [d.get("s"), d.get("e"), d.get("legado"), d.get("vistos"), d.get("no_vistos"), d.get("fecha")]
         if not forzar and previo and time.time() - previo.get("comprobado", 0) < TTL \
-                and previo.get("visto") == [d.get("s"), d.get("e")]:
+                and previo.get("revision") == revision:
             continue
         try:
-            est = estado(t, int(sid), int(d["s"]), int(d["e"]), d.get("fecha"))
+            est = estado(t, int(sid), int(d["s"]), int(d["e"]), d.get("fecha"), d)
         except Exception as ex:
             log("[Palantix] novedades de %s: %s" % (d.get("titulo"), ex))
             continue
-        est["visto"] = [d.get("s"), d.get("e")]
+        est["revision"] = revision
         ahora[sid] = est
         if previo and est["ultimo"] != previo.get("ultimo") and est["pendientes"]:
             recien.append((d.get("titulo", ""), est["ultimo"]))

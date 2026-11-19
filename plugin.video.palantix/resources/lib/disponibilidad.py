@@ -46,7 +46,7 @@ def filtrar(peliculas, carpeta, configuracion):
         pendientes = []
         for i, peli in candidatos.items():
             if guardadas.get(i, (0, 0))[1] <= ahora:
-                ficha = {k: peli[k] for k in ("id", "title", "original_title", "release_date", "imdb_id") if k in peli}
+                ficha = {k: peli[k] for k in ("id", "title", "original_title", "release_date", "imdb_id", "tmdb_id", "temporada", "episodio") if k in peli}
                 pendientes.append((clave, i, json.dumps(ficha), ahora))
         if pendientes:
             db.executemany("INSERT OR IGNORE INTO pendientes VALUES (?, ?, ?, ?)", pendientes)

@@ -209,7 +209,9 @@ def comprobar_fuentes():
 
     addon = xbmcaddon.Addon()
     ajustes = addon.getSetting
-    if ajustes("solo_peliculas_con_fuentes") != "true":
+    peliculas = ajustes("solo_peliculas_con_fuentes") == "true"
+    episodios = ajustes("comprobar_fuentes_episodios") == "true"
+    if not (peliculas or episodios):
         return
     perfil = xbmcvfs.translatePath(addon.getAddonInfo("profile"))
     cache = os.path.join(perfil, "cache")
@@ -219,8 +221,13 @@ def comprobar_fuentes():
     origenes = [l["origen"] for l in mislistas.leer(perfil)]
     buscar, proveedores = fuentes_catalogo.consulta(cliente, ajustes, origenes, cache, log)
     pref = fuentes_catalogo.preferencias(ajustes)
-    disponibilidad.comprobar_lote(
-        cache, (proveedores, pref), lambda peli: fuentes_catalogo.hay_fuentes(peli, buscar, pref))
+    def consultar(ficha):
+        return fuentes_catalogo.hay_fuentes(ficha, buscar, pref)
+
+    if episodios:
+        disponibilidad.comprobar_lote(cache, (proveedores, pref, "episodios"), consultar)
+    if peliculas:
+        disponibilidad.comprobar_lote(cache, (proveedores, pref), consultar)
 
 
 def main():

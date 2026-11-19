@@ -63,5 +63,7 @@ def consulta(t, ajustes, listas_url, cache, log):
 def hay_fuentes(m, buscar, preferencias):
     anio = str(m.get("release_date") or "")[:4]
     peli = Peli(titulo=m.get("title") or "", titulo_original=m.get("original_title") or "",
-                anio=int(anio) if anio.isdigit() else 0, tmdb_id=m["id"], imdb_id=m.get("imdb_id") or "")
+                anio=int(anio) if anio.isdigit() else 0, tmdb_id=m.get("tmdb_id", m["id"]), imdb_id=m.get("imdb_id") or "",
+                tipo="episodio" if "episodio" in m else "pelicula",
+                temporada=m.get("temporada", 0), episodio=m.get("episodio", 0))
     return bool(etiquetas.ordenar(buscar(peli), **preferencias))

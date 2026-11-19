@@ -29,6 +29,8 @@
         <setting id="calidad_max" type="enum" label="Calidad máxima (baja si tu conexión es lenta)" values="4K|1080p|720p" default="0"/>
         <setting id="autoplay" type="bool" label="Reproducción automática (elige la mejor fuente sin preguntar)" default="false"/>
         <setting type="lsep" label="Series"/>
+        <setting id="umbral_visto" type="slider" label="Porcentaje del capítulo para marcarlo como visto" default="80" range="50,5,95" option="int"/>
+        <setting id="comprobar_fuentes_episodios" type="bool" label="Comprobar fuentes de capítulos en segundo plano" default="true"/>
         <setting id="intro_activo" type="bool" label="Botón «Saltar intro» (capítulos del vídeo y lo que aprende de ti)" default="true"/>
         <setting id="siguiente_activo" type="bool" label="Ofrecer el siguiente capítulo al acabar" default="true"/>
         <setting id="aviso_novedades" type="bool" label="Avisarme en la tele cuando salga un capítulo nuevo" default="true"/>
