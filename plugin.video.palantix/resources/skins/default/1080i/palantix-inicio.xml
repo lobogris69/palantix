@@ -277,6 +277,7 @@
         <!-- logo -->
         <control type="image"><left>150</left><top>52</top><width>64</width><height>64</height><texture>$INFO[Window.Property(logo)]</texture></control>
         <control type="label"><left>230</left><top>58</top><width>500</width><height>54</height><font>font32_title</font><textcolor>FFFFFFFF</textcolor><label>[B]PALANTIX[/B]</label></control>
+        <control type="label"><left>232</left><top>104</top><width>400</width><height>28</height><font>font10</font><textcolor>80FFFFFF</textcolor><label>$INFO[Window.Property(version),versión ,]</label></control>
         <control type="label"><left>1400</left><top>58</top><width>460</width><height>54</height><align>right</align><font>font_clock</font><textcolor>FFFFFFFF</textcolor><label>$INFO[System.Time]</label></control>
         <!-- mensaje mientras carga -->
         <control type="label"><left>150</left><top>620</top><width>1600</width><height>60</height><font>font27</font><textcolor>FFB8BCC8</textcolor>

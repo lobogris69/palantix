@@ -170,6 +170,7 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print):
     class Inicio(xbmcgui.WindowXML):
         def onInit(self):
             self.setProperty("logo", logo)
+            self.setProperty("version", addon.getAddonInfo("version"))
             self.setProperty("fondo_palantix", addon.getAddonInfo("fanart"))
             if getattr(self, "_listo", False):
                 return
