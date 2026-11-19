@@ -3,6 +3,7 @@
     <category label="General">
         <setting id="tmdb_key" type="text" label="Clave de TMDB" default=""/>
         <setting type="action" label="Escribir o comprobar la clave de TMDB" action="RunPlugin(plugin://plugin.video.palantix/?accion=tmdb_clave)"/>
+        <setting id="ultima_version_avisada" type="text" label="" default="" visible="false"/>
         <setting id="auto_actualizar" type="bool" label="Actualizar Palantix solo cuando haya versión nueva" default="true"/>
         <setting type="action" label="Buscar actualización ahora" action="RunPlugin(plugin://plugin.video.palantix/?accion=actualizar)"/>
         <setting id="idioma_cat" type="enum" label="Idioma de títulos y sinopsis" values="Español (España)|Español (Latinoamérica)|English|Français|Italiano|Português|Deutsch" default="0"/>
