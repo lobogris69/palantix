@@ -226,5 +226,30 @@ comprobar("inicio: menú lateral con Buscar, Películas, Series... y Menú clás
           [m[0] for m in inicio.menu(url)] == ["Inicio", "Buscar", "Películas", "Series", "Mis series", "Mi lista",
                                                 "Mis listas", "Ajustes", "Actualizar", "Menú clásico", "Salir"])
 
+# ---------------------------------------------------------------- pestañas Películas y Series
+class TPestanas(TFalso):
+    def populares(self, p): return self._r(5000)
+    def por_genero(self, g, p): return self._r(6000 + g)
+    def s_populares(self, p): return self._r(7000)
+    def s_mejor_valoradas(self, p): return self._r(8000)
+    def s_por_genero(self, g, p): return self._r(9000 + g)
+
+
+PP = tempfile.mkdtemp(prefix="palantix_pestanas_")
+pel = inicio.datos_pestana(PP, TPestanas(), url, "peliculas")
+comprobar("pestaña Películas: 8 filas (de la 103 a la 110) con 20 carátulas", sorted(pel) == list(range(103, 111))
+          and all(len(v) == 20 for v in pel.values()))
+comprobar("pestaña Películas: la fila Terror pide el género 27 y reproduce", pel[109][0]["label"] == "Peli %d" % (6000 + 27)
+          and pel[109][0]["tipo"] == "reproducir")
+ser = inicio.datos_pestana(PP, TPestanas(), url, "series")
+comprobar("pestaña Series: las series abren sus temporadas", ser[106][0]["label"] == "Serie %d" % (9000 + 18)
+          and ser[106][0]["tipo"] == "carpeta" and "accion=temporadas" in ser[106][0]["url"])
+antes = TFalso.llamadas
+inicio.datos_pestana(PP, TPestanas(), url, "peliculas")
+comprobar("pestañas: la segunda vez abren al instante (caché)", TFalso.llamadas == antes)
+comprobar("pestañas: títulos de las filas", inicio.titulos("series")[110] == "Documentales" and inicio.titulos("inicio")[101] == "Continuar viendo")
+comprobar("menú lateral: Películas y Series cambian de pestaña sin salir",
+          [(m[0], m[2], m[3]) for m in inicio.menu(url)][2:4] == [("Películas", "pestana", "peliculas"), ("Series", "pestana", "series")])
+
 print("\n%s" % ("TODO CORRECTO" if not fallos else "%d FALLOS" % fallos))
 sys.exit(1 if fallos else 0)

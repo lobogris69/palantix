@@ -17,8 +17,8 @@ FONDO = "FF0B0B10"
 TEXTO2 = "FFB8BCC8"
 
 # (id, forma): «ancha» = miniatura 16:9 con barra de progreso; «poster» = carátula 2:3
-FILAS = [(101, "ancha"), (102, "ancha"), (103, "poster"), (104, "poster"),
-         (105, "poster"), (106, "poster"), (107, "poster")]
+FILAS = [(101, "ancha"), (102, "ancha"), (103, "poster"), (104, "poster"), (105, "poster"),
+         (106, "poster"), (107, "poster"), (108, "poster"), (109, "poster"), (110, "poster")]
 MENU = 200
 TAM = {"poster": (196, 294), "ancha": (352, 198)}
 
@@ -143,7 +143,7 @@ def xml():
         <control type="image"><width>1920</width><height>1080</height><texture colordiffuse="%(fondo)s">blanco.png</texture></control>
         <!-- cartel por defecto (con el menú enfocado o mientras carga) -->
         <control type="group">
-            <visible>!Control.HasFocus(101) + !Control.HasFocus(102) + !Control.HasFocus(103) + !Control.HasFocus(104) + !Control.HasFocus(105) + !Control.HasFocus(106) + !Control.HasFocus(107)</visible>
+            <visible>%(ninguna)s</visible>
             <control type="image"><left>420</left><width>1500</width><height>844</height><texture>$INFO[Window.Property(fondo_palantix)]</texture><aspectratio>scale</aspectratio></control>
             <control type="image"><width>1920</width><height>1080</height><texture>degradado_izq.png</texture></control>
             <control type="image"><top>380</top><width>1920</width><height>700</height><texture>degradado_abajo.png</texture></control>
@@ -152,6 +152,7 @@ def xml():
         <!-- logo -->
         <control type="image"><left>150</left><top>52</top><width>64</width><height>64</height><texture>$INFO[Window.Property(logo)]</texture></control>
         <control type="label"><left>230</left><top>58</top><width>500</width><height>54</height><font>font32_title</font><textcolor>FFFFFFFF</textcolor><label>[B]PALANTIX[/B]</label></control>
+        <control type="label"><left>470</left><top>64</top><width>600</width><height>46</height><font>font27</font><textcolor>%(acento)s</textcolor><label>$INFO[Window.Property(pestana),|   ,]</label></control>
         <control type="label"><left>232</left><top>104</top><width>400</width><height>28</height><font>font10</font><textcolor>80FFFFFF</textcolor><label>$INFO[Window.Property(version),versión ,]</label></control>
         <control type="label"><left>1400</left><top>58</top><width>460</width><height>54</height><align>right</align><font>font_clock</font><textcolor>FFFFFFFF</textcolor><label>$INFO[System.Time]</label></control>
         <!-- mensaje mientras carga -->
@@ -189,7 +190,8 @@ def xml():
         </control>
     </controls>
 </window>
-''' % {"fondo": FONDO, "carteles": carteles, "filas": filas, "menu": MENU, "acento": ACENTO, "t2": TEXTO2}
+''' % {"fondo": FONDO, "carteles": carteles, "filas": filas, "menu": MENU, "acento": ACENTO, "t2": TEXTO2,
+       "ninguna": " + ".join("!Control.HasFocus(%d)" % fid for fid, _ in FILAS)}
 
 
 if __name__ == "__main__":

@@ -20,6 +20,20 @@ FILAS = [
     (106, "Las mejor valoradas"),
     (107, "Mi lista"),
 ]
+TODAS = list(range(101, 111))  # ids de las filas del XML (101-102 anchas, 103-110 carátulas)
+
+# Pestañas: (fila, título, (qué pedir a TMDB, argumento))
+PESTANAS = {
+    "peliculas": [(103, "Tendencias en películas", ("lista", "tendencias")), (104, "Populares", ("lista", "populares")),
+                  (105, "Estrenos en cines", ("lista", "en_cines")), (106, "Las mejor valoradas", ("lista", "mejor_valoradas")),
+                  (107, "Acción", ("genero", 28)), (108, "Comedia", ("genero", 35)), (109, "Terror", ("genero", 27)),
+                  (110, "Ciencia ficción", ("genero", 878))],
+    "series": [(103, "Series del momento", ("lista", "s_tendencias")), (104, "Series populares", ("lista", "s_populares")),
+               (105, "Las mejor valoradas", ("lista", "s_mejor_valoradas")), (106, "Drama", ("s_genero", 18)),
+               (107, "Comedia", ("s_genero", 35)), (108, "Crimen", ("s_genero", 80)), (109, "Animación", ("s_genero", 16)),
+               (110, "Documentales", ("s_genero", 99))],
+}
+NOMBRE_PESTANA = {"inicio": "", "peliculas": "Películas", "series": "Series"}
 CACHE_SEG = 3600
 
 
@@ -86,6 +100,50 @@ def _tmdb_cache(perfil, t):
     return datos
 
 
+def _pedir(t, que):
+    tipo, arg = que
+    if tipo == "lista":
+        return getattr(t, arg)(1)
+    if tipo == "genero":
+        return t.por_genero(arg, 1)
+    return t.s_por_genero(arg, 1)
+
+
+def datos_pestana(perfil, t, url, pestana):
+    """{fila: elementos} de la pestaña Películas o Series (en paralelo y guardado 1 hora)."""
+    filas = PESTANAS[pestana]
+    ruta = os.path.join(perfil, "inicio_%s.json" % pestana)
+    crudo = None
+    try:
+        with open(ruta, encoding="utf-8") as f:
+            c = json.load(f)
+        if time.time() - c.get("fecha", 0) < CACHE_SEG and c.get("idioma") == t.idioma:
+            crudo = {int(k): v for k, v in c["datos"].items()}
+    except (OSError, ValueError, KeyError):
+        pass
+    if crudo is None:
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futuros = {fid: pool.submit(_pedir, t, que) for fid, _, que in filas}
+        crudo = {}
+        for fid, fut in futuros.items():
+            try:
+                crudo[fid] = fut.result().get("results", [])[:20]
+            except Exception:
+                crudo[fid] = []
+        if any(crudo.values()):
+            os.makedirs(perfil, exist_ok=True)
+            with open(ruta, "w", encoding="utf-8") as f:
+                json.dump({"fecha": time.time(), "idioma": t.idioma, "datos": crudo}, f)
+    hacer = elemento_pelicula if pestana == "peliculas" else elemento_serie
+    return {fid: [hacer(x, url) for x in crudo.get(fid, [])] for fid, _, _ in filas}
+
+
+def titulos(pestana):
+    if pestana == "inicio":
+        return dict(FILAS)
+    return {fid: titulo for fid, titulo, _ in PESTANAS[pestana]}
+
+
 def datos_filas(perfil, t, url, favoritas=()):
     """{id_fila: [elementos]} listos para pintar."""
     filas = {fid: [] for fid, _ in FILAS}
@@ -133,10 +191,10 @@ def datos_filas(perfil, t, url, favoritas=()):
 
 
 def menu(url, con_trakt=False):
-    m = [("Inicio", "", "inicio", ""),
+    m = [("Inicio", "", "pestana", "inicio"),
          ("Buscar", "DefaultAddonsSearch.png", "carpeta", url(accion="buscar")),
-         ("Películas", "DefaultMovies.png", "carpeta", url(accion="m_peliculas")),
-         ("Series", "DefaultTVShows.png", "carpeta", url(accion="m_series")),
+         ("Películas", "DefaultMovies.png", "pestana", "peliculas"),
+         ("Series", "DefaultTVShows.png", "pestana", "series"),
          ("Mis series", "DefaultInProgressShows.png", "carpeta", url(accion="seguir")),
          ("Mi lista", "DefaultFavourites.png", "carpeta", url(accion="favoritas")),
          ("Mis listas", "DefaultPlaylist.png", "carpeta", url(accion="listas"))]
@@ -184,17 +242,32 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print):
                 it.setProperty("tipo", tipo)
                 it.setProperty("url", destino)
                 m.addItem(it)
-            self.setProperty("estado", "Cargando tu Palantix...")
+            self.cargar("inicio")
+
+        def cargar(self, pestana):
+            """Rellena las filas con la pestaña pedida (Inicio, Películas o Series) sin salir de la pantalla."""
+            self.pestana = pestana
+            self.setProperty("pestana", NOMBRE_PESTANA[pestana])
+            for fid in TODAS:
+                self.getControl(fid).reset()
+                self.clearProperty("fila%d" % fid)
+            self.setProperty("estado", "Cargando...")
             try:
-                filas = datos_filas(perfil, t, url, favoritas)
+                if pestana == "inicio":
+                    filas = datos_filas(perfil, t, url, favoritas)
+                elif t:
+                    filas = datos_pestana(perfil, t, url, pestana)
+                else:
+                    filas = {}
             except Exception as e:
-                log("Inicio: %s" % e)
+                log("Pestaña %s: %s" % (pestana, e))
                 filas = {}
             self.clearProperty("estado")
             primera = None
-            for fid, _ in FILAS:
+            for fid, titulo in sorted(titulos(pestana).items()):
                 elementos = filas.get(fid, [])
                 if elementos:
+                    self.setProperty("fila%d" % fid, titulo)
                     self.getControl(fid).addItems([li(e) for e in elementos])
                     primera = primera or fid
             if primera:
@@ -203,13 +276,20 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print):
                 self.setProperty("estado", "Pon tu clave de TMDB en Ajustes para ver el catálogo")
                 self.setFocusId(200)
 
+        def onAction(self, accion):
+            # Atrás: desde Películas o Series vuelve al Inicio; desde el Inicio, cierra Palantix
+            if accion.getId() in (10, 92):
+                if getattr(self, "pestana", "inicio") != "inicio":
+                    return self.cargar("inicio")
+                return self.close()
+
         def onClick(self, control_id):
             item = self.getControl(control_id).getSelectedItem()
             if not item:
                 return
             tipo, destino = item.getProperty("tipo"), item.getProperty("url")
-            if tipo == "inicio":
-                self.setFocusId(9000)
+            if tipo == "pestana":
+                self.cargar(destino)
             elif tipo == "salir":  # cerrar Palantix y volver a la pantalla principal de Kodi
                 self.close()
                 xbmc.executebuiltin("ActivateWindow(Home)")
