@@ -172,9 +172,14 @@ def varias_paginas(funcion, pagina):
     return {"page": pagina, "total_pages": -(-total // k), "results": resultados}
 
 
+LOGO = ADDON.getAddonInfo("icon")
+FONDO = ADDON.getAddonInfo("fanart")
+
+
 def carpeta(etiqueta, destino, icono="DefaultFolder.png"):
+    """Entrada de menú: icono pequeño de la lista, y el logo y el fondo de Palantix en grande."""
     li = xbmcgui.ListItem(etiqueta)
-    li.setArt({"icon": icono, "thumb": icono})
+    li.setArt({"icon": icono, "thumb": LOGO, "poster": LOGO, "fanart": FONDO})
     xbmcplugin.addDirectoryItem(HANDLE, destino, li, isFolder=True)
 
 
