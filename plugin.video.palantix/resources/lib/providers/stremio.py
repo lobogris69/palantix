@@ -30,10 +30,11 @@ def _texto(valor):
 class Stremio(Proveedor):
     id = "stremio"
 
-    def __init__(self, manifiesto, numero, log=print):
+    def __init__(self, manifiesto, numero, log=print, fallo=lambda proveedor: None):
         self.manifiesto = manifiesto
         self.nombre = "Stremio %d" % numero
         self.log = log
+        self.fallo = fallo
 
     def buscar(self, peli):
         if not re.fullmatch(r"tt[0-9]+", peli.imdb_id):
@@ -45,15 +46,22 @@ class Stremio(Proveedor):
         try:
             return self._buscar(tipo, video)
         except (OSError, ValueError, TypeError):
+            self.fallo(self.nombre)
             self.log("[Palantix] %s: no se pudo consultar el complemento" % self.nombre)
             return []
 
-    def _buscar(self, tipo, video):
+    def leer_manifiesto(self):
         partes = _url_http(self.manifiesto, ("https",))
         if not partes or not partes.path.endswith("/manifest.json"):
             raise ValueError("URL de manifiesto inválida")
         manifiesto = http.get_json(self.manifiesto, timeout=8, https_only=True)
-        if not isinstance(manifiesto, dict) or not self._admite(manifiesto, tipo, video):
+        if not isinstance(manifiesto, dict) or not isinstance(manifiesto.get("resources"), list):
+            raise ValueError("Manifiesto inválido")
+        return partes, manifiesto
+
+    def _buscar(self, tipo, video):
+        partes, manifiesto = self.leer_manifiesto()
+        if not self._admite(manifiesto, tipo, video):
             return []
         ruta = partes.path[:-len("manifest.json")] + "stream/%s/%s.json" % (tipo, quote(video, safe=":"))
         respuesta = http.get_json(urlunsplit(partes._replace(path=ruta)), timeout=8, https_only=True)

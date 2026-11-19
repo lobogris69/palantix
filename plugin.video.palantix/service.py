@@ -10,6 +10,7 @@ main.py deja los datos de lo que va a sonar en propiedades de la ventana princip
 """
 import json
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import xbmc
@@ -80,6 +81,16 @@ class Reproductor(xbmc.Player):
                 self.setAudioStream(pista)
         except (RuntimeError, ValueError, TypeError, KeyError):
             log("Kodi no pudo aplicar el idioma de audio preferido")
+
+    def onPlayBackError(self):
+        solicitud = propiedad_json("palantix.meta") or {}
+        reciente = time.time() - solicitud.get("inicio_solicitado", 0) < 90
+        if self.meta or reciente:
+            xbmcgui.Dialog().notification("Palantix", "Kodi no pudo abrir o continuar el vídeo. Prueba otra fuente.",
+                                         xbmcgui.NOTIFICATION_WARNING, 7000)
+        VENTANA.clearProperty("palantix.meta")
+        VENTANA.clearProperty("palantix.siguiente")
+        self._fin(terminado=False)
 
     def onPlayBackStopped(self):
         self._fin(terminado=False)

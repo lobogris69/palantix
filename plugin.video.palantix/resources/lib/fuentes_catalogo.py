@@ -37,7 +37,7 @@ def preferencias(ajustes):
     }
 
 
-def consulta(t, ajustes, listas_url, cache, log):
+def consulta(t, ajustes, listas_url, cache, log, fallo=lambda proveedor: None):
     archivo_activo = ajustes("prov_archive_org") != "false"
     listas_url = listas_url if ajustes("prov_listas") != "false" else []
     manifiestos = []
@@ -46,16 +46,17 @@ def consulta(t, ajustes, listas_url, cache, log):
             origen = ajustes("stremio_%d" % n).strip()
             if origen:
                 manifiestos.append((n, origen))
-    extra = [ListaURL(listas_url, cache, max(1, _entero(ajustes, "cache_min", 60)) * 60, log)] if any(listas_url) else []
-    extra += [Stremio(origen, n, log) for n, origen in manifiestos]
+    extra = [ListaURL(listas_url, cache, max(1, _entero(ajustes, "cache_min", 60)) * 60, log, fallo)] if any(listas_url) else []
+    extra += [Stremio(origen, n, log, fallo) for n, origen in manifiestos]
 
     def buscar(peli):
         if manifiestos and not peli.imdb_id and t and peli.tmdb_id:
             try:
                 peli.imdb_id = t.imdb_id(peli.tmdb_id, "tv" if peli.tipo == "episodio" else "movie")
             except Exception:
+                fallo("Identificador IMDb de TMDB")
                 log("No se pudo obtener el identificador IMDb")
-        return buscar_fuentes(peli, activo=lambda _: archivo_activo, log=log, extra=extra)
+        return buscar_fuentes(peli, activo=lambda _: archivo_activo, log=log, extra=extra, fallo=fallo)
 
     return buscar, (archivo_activo, listas_url, manifiestos)
 

@@ -11,10 +11,11 @@ import xbmcgui
 import xbmcplugin
 import xbmcvfs
 
-from resources.lib import disponibilidad, etiquetas, fuentes_catalogo, listas
+from resources.lib import disponibilidad, etiquetas, fuentes_catalogo, listas, preferencias_copia
 from resources.lib import actualizar, debrid, inicio, mislistas, novedades, progreso, seguimiento, subtitulos, trakt
 from resources.lib import tmdb as tmdb_mod
 from resources.lib.providers import Peli
+from resources.lib.providers.stremio import Stremio
 
 ADDON = xbmcaddon.Addon()
 BASE = sys.argv[0]
@@ -269,8 +270,9 @@ def servicio_por_id(sid):
     return trakt.Trakt(AJ, log=log) if sid == "trakt" else debrid.por_id(sid, AJ, **_kw())
 
 
-def vincular():
-    s = servicio_por_id(PARAMS["s"])
+def vincular(sid=None):
+    sid = sid or PARAMS["s"]
+    s = servicio_por_id(sid)
     if s.tipo_vinculo == "clave":
         clave = xbmcgui.Dialog().input("Clave de la API de %s (la ves en tu cuenta, en la web)" % s.nombre)
         if not clave:
@@ -283,7 +285,7 @@ def vincular():
             return xbmcgui.Dialog().ok(s.nombre, "La clave no funciona: %s" % e)
         AJ.set(s.id + "_activo", "true")
         return xbmcgui.Dialog().ok(s.nombre, "Cuenta vinculada.\n" + texto)
-    if PARAMS["s"] == "trakt" and not s.configurado():
+    if sid == "trakt" and not s.configurado():
         return xbmcgui.Dialog().ok("Trakt", "En developer.trakt.tv/apps, crea una app Development o usa la de Palantix\n"
                                    "y pon su Client ID en Ajustes → Trakt.")
     try:
@@ -1022,9 +1024,9 @@ def preferencias():
     return fuentes_catalogo.preferencias(ADDON.getSetting)
 
 
-def consulta_fuentes(t):
+def consulta_fuentes(t, fallo=lambda proveedor: None):
     origenes = origenes_listas() if ADDON.getSetting("prov_listas") != "false" else []
-    return fuentes_catalogo.consulta(t, ADDON.getSetting, origenes, CACHE, log)
+    return fuentes_catalogo.consulta(t, ADDON.getSetting, origenes, CACHE, log, fallo)
 
 
 def peliculas_disponibles(peliculas):
@@ -1039,6 +1041,113 @@ def peliculas_disponibles(peliculas):
         else:
             aviso("No se encontraron fuentes para las películas de esta página")
     return visibles
+
+
+def comprobar_manifiestos():
+    lineas = []
+    for n in range(1, 4):
+        origen = ADDON.getSetting("stremio_%d" % n).strip()
+        estado = "Sin configurar"
+        if origen:
+            try:
+                _, datos = Stremio(origen, n).leer_manifiesto()
+                recursos = datos["resources"]
+                admite = any(r == "stream" or (isinstance(r, dict) and r.get("name") == "stream")
+                             for r in recursos)
+                estado = "Manifiesto accesible" if admite else "Manifiesto sin recurso de reproducción"
+            except (OSError, ValueError, TypeError):
+                estado = "No se pudo leer el manifiesto"
+        lineas.append("Fuente %d · %s" % (n, estado))
+    xbmcgui.Dialog().ok("Fuentes de Stremio", "\n".join(lineas))
+
+
+def estado_indice():
+    _, proveedores = consulta_fuentes(None)
+    pref = preferencias()
+    lineas = []
+    for titulo, config in (("Películas", (proveedores, pref)), ("Capítulos", (proveedores, pref, "episodios"))):
+        confirmados, cola, ultima = disponibilidad.resumen(CACHE, config)
+        fecha = time.strftime("%d/%m/%Y %H:%M", time.localtime(ultima)) if ultima else "sin comprobaciones"
+        lineas.append("%s · %d con fuente · %d por comprobar\nÚltima revisión: %s" %
+                      (titulo, confirmados, cola, fecha))
+    xbmcgui.Dialog().ok("Estado de la comprobación de fuentes", "\n\n".join(lineas))
+
+
+def asistente_configuracion():
+    addon = xbmcaddon.Addon()
+    tk, ad = servicio_por_id("trakt"), servicio_por_id("ad")
+    def estado(servicio):
+        if not servicio.vinculado():
+            return "Sin vincular"
+        return "Vinculado" if servicio.encendido() else "Desactivado"
+
+    opciones = [
+        ("TMDB · " + ("Clave guardada" if clave_tmdb() else "Sin configurar"), comprobar_tmdb),
+        ("Trakt · " + estado(tk), lambda: comprobar_cuenta_asistente("trakt")),
+        ("AllDebrid · " + estado(ad), lambda: comprobar_cuenta_asistente("ad")),
+        ("Stremio · " + ("Activo" if addon.getSetting("prov_stremio") == "true" else "Desactivado"),
+         comprobar_manifiestos),
+        ("Estado de la comprobación de fuentes", estado_indice),
+        ("Probar vídeo directo · Sintel (Blender)", probar_video_asistente),
+        ("Copiar preferencias a otro Kodi", copiar_preferencias),
+    ]
+    seleccion = xbmcgui.Dialog().select("Comprobar mi configuración", [nombre for nombre, _ in opciones])
+    if seleccion >= 0:
+        opciones[seleccion][1]()
+
+
+def comprobar_cuenta_asistente(sid):
+    servicio = servicio_por_id(sid)
+    if not servicio.vinculado():
+        return vincular(sid)
+    try:
+        servicio.cuenta()
+    except Exception:
+        return xbmcgui.Dialog().ok(servicio.nombre, "No se pudo comprobar la cuenta. Revisa la conexión o vuelve a vincular.")
+    estado = "Servicio activo." if servicio.encendido() else "Activa el servicio en Ajustes para usarlo."
+    xbmcgui.Dialog().ok(servicio.nombre, "La cuenta responde. " + estado)
+
+
+def probar_video_asistente():
+    video = "https://download.blender.org/durian/movies/Sintel.2010.1080p.mkv"
+    xbmc.Player().play(video, xbmcgui.ListItem("Sintel · Prueba de reproducción"))
+
+
+def copiar_preferencias():
+    dialogo = xbmcgui.Dialog()
+    accion = dialogo.select("Preferencias de Palantix", ["Exportar preferencias", "Importar preferencias"])
+    if accion not in (0, 1):
+        return
+    if accion == 0:
+        destino = dialogo.browseSingle(3, "Carpeta para guardar las preferencias", "files")
+        if not destino:
+            return
+        nombre = "palantix-preferencias-%s.json" % time.strftime("%Y%m%d-%H%M%S")
+        try:
+            with open(os.path.join(xbmcvfs.translatePath(destino), nombre), "x", encoding="utf-8") as f:
+                f.write(preferencias_copia.exportar(ADDON.getSetting))
+        except OSError:
+            return dialogo.ok("Palantix", "No se pudo guardar el archivo. Elige una carpeta local con permiso de escritura.")
+        return dialogo.ok("Palantix", "Preferencias guardadas en " + nombre)
+
+    origen = dialogo.browseSingle(1, "Elige un archivo de preferencias", "files", ".json")
+    if not origen:
+        return
+    try:
+        with open(xbmcvfs.translatePath(origen), "rb") as f:
+            datos = preferencias_copia.importar(f.read(preferencias_copia.MAX_BYTES + 1).decode("utf-8"))
+    except (OSError, ValueError):
+        return dialogo.ok("Palantix", "No se pudo leer un archivo válido de preferencias.")
+    if dialogo.yesno("Palantix", "¿Aplicar las preferencias de idioma, calidad y menús de este archivo?"):
+        anteriores = {clave: ADDON.getSetting(clave) for clave in datos}
+        try:
+            for clave, valor in datos.items():
+                ADDON.setSetting(clave, valor)
+        except (RuntimeError, ValueError):
+            for clave, valor in anteriores.items():
+                ADDON.setSetting(clave, valor)
+            return dialogo.ok("Palantix", "No se pudo aplicar la copia de preferencias.")
+        dialogo.ok("Palantix", "Preferencias importadas. Vuelve a abrir Palantix para ver los cambios.")
 
 
 def no_reproducir():
@@ -1066,8 +1175,9 @@ def reproducir():
         desde = previo["pos"] if n == 0 else 0
     barra = xbmcgui.DialogProgress()
     barra.create("Palantix", "Buscando fuentes para «%s»..." % nombre)
+    fallos = []
     try:
-        buscar, _ = consulta_fuentes(api(obligatoria=False))
+        buscar, _ = consulta_fuentes(api(obligatoria=False), fallos.append)
         fuentes = buscar(peli)
     finally:
         barra.close()
@@ -1075,7 +1185,10 @@ def reproducir():
     pref = preferencias()
     ordenadas = etiquetas.ordenar(fuentes, **pref)
     if not ordenadas:
-        aviso("No hay fuentes para «%s»%s" % (nombre, " en tu idioma" if fuentes else ""))
+        if fallos:
+            aviso("Búsqueda incompleta. Sin respuesta de: " + ", ".join(sorted(set(fallos))))
+        else:
+            aviso("No hay fuentes para «%s»%s" % (nombre, " en tu idioma" if fuentes else ""))
         return no_reproducir()
 
     automatico = ADDON.getSetting("autoplay") == "true" and not PARAMS.get("elegir")
@@ -1111,13 +1224,13 @@ def reproducir():
         if not f.privada:
             log("Reproduciendo %s" % f.url)
         prioridad_audio = pref["prioridad_idiomas"] or (pref["idioma"],)
-        avisar_al_servicio(peli, prioridad_audio)
         li = xbmcgui.ListItem(path=ruta)
         if desde:
             li.setProperty("StartOffset", str(int(desde)))
         sub = poner_subtitulos(peli, a, pref)
         if sub:
             li.setSubtitles([sub])
+        avisar_al_servicio(peli, prioridad_audio)
         return xbmcplugin.setResolvedUrl(HANDLE, True, li)
     no_reproducir()
 
@@ -1156,7 +1269,7 @@ def avisar_al_servicio(peli, prioridad_audio=()):
     meta = {"tipo": peli.tipo, "tmdb": peli.tmdb_id, "s": peli.temporada, "e": peli.episodio,
             "titulo": peli.titulo, "original": peli.titulo_original, "anio": peli.anio,
             "poster": PARAMS.get("poster", ""), "fanart": PARAMS.get("fondo", ""),
-            "prioridad_audio": prioridad_audio}
+            "prioridad_audio": prioridad_audio, "inicio_solicitado": time.time()}
     ventana.setProperty("palantix.meta", json.dumps(meta))
     ventana.clearProperty("palantix.siguiente")
     if peli.tipo != "episodio" or ADDON.getSetting("siguiente_activo") == "false":
@@ -1197,6 +1310,9 @@ SIN_TMDB = {
     "quitar_medias": quitar_medias,
     "trailer": trailer,
     "ajustes": ADDON.openSettings,
+    "asistente_configuracion": asistente_configuracion,
+    "estado_indice": estado_indice,
+    "copiar_preferencias": copiar_preferencias,
     "orden_idiomas": configurar_prioridad_idiomas,
     "tmdb_clave": comprobar_tmdb,
     "actualizar": lambda: buscar_actualizacion(),

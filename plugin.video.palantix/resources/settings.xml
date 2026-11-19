@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <settings>
     <category label="General">
+        <setting type="action" label="Comprobar mi configuración" action="RunPlugin(plugin://plugin.video.palantix/?accion=asistente_configuracion)"/>
+        <setting type="action" label="Copiar preferencias a otro Kodi" action="RunPlugin(plugin://plugin.video.palantix/?accion=copiar_preferencias)"/>
         <setting id="tmdb_key" type="text" label="Clave de TMDB" default=""/>
         <setting type="action" label="Escribir o comprobar la clave de TMDB" action="RunPlugin(plugin://plugin.video.palantix/?accion=tmdb_clave)"/>
         <setting id="ultima_version_avisada" type="text" label="" default="" visible="false"/>
@@ -95,6 +97,7 @@
         <setting id="trakt_caduca" type="text" label="" default="" visible="false"/>
     </category>
     <category label="Fuentes">
+        <setting type="action" label="Estado de la comprobación de fuentes" action="RunPlugin(plugin://plugin.video.palantix/?accion=estado_indice)"/>
         <setting id="prov_stremio" type="bool" label="Buscar fuentes en complementos de Stremio" default="false"/>
         <setting type="lsep" label="Usa estos complementos solo para contenido que tengas autorización para reproducir"/>
         <setting id="stremio_1" type="text" label="URL HTTPS del manifiesto (1)" default="https://torrentio.strem.fun/language=spanish,latino%7Cqualityfilter=cam/manifest.json"/>
