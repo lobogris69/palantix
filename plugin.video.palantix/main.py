@@ -478,6 +478,7 @@ def menu_peliculas():
     carpeta("Tendencias de la semana", url(accion="tendencias"))
     carpeta("Populares", url(accion="populares"))
     carpeta("En cines", url(accion="en_cines"))
+    carpeta("Novedades en streaming", url(accion="novedades_streaming"))
     carpeta("Mejor valoradas", url(accion="mejor_valoradas"))
     carpeta("Géneros", url(accion="generos"))
     carpeta("Por año", url(accion="anios", destino="anio"))
@@ -1147,7 +1148,7 @@ SIN_TMDB = {
 def con_tmdb(t, accion, page):
     gid, anio = PARAMS.get("gid"), PARAMS.get("a")
     vp = varias_paginas
-    if accion in ("tendencias", "populares", "en_cines", "mejor_valoradas"):
+    if accion in ("tendencias", "populares", "en_cines", "mejor_valoradas", "novedades_streaming"):
         listar(vp(getattr(t, accion), page), accion)
     elif accion in ("s_tendencias", "s_populares", "s_mejor_valoradas"):
         listar_series(vp(getattr(t, accion), page), accion)

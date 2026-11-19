@@ -1,4 +1,6 @@
 """Catálogo: The Movie Database (TMDB). Solo metadatos (títulos, carátulas, sinopsis), nunca vídeo."""
+from datetime import date, timedelta
+
 from .http import get_json
 
 API = "https://api.themoviedb.org/3"
@@ -91,6 +93,15 @@ class TMDB:
 
     def en_cines(self, page=1):
         return self._get("/movie/now_playing", page=page, region=self.region)
+
+    def novedades_streaming(self, page=1):
+        """Estrenos digitales de los últimos 60 días con oferta de streaming en la región."""
+        hoy = date.today()
+        return self._get("/discover/movie", page=page, region=self.region,
+                         watch_region=self.region, with_release_type=4,
+                         with_watch_monetization_types="flatrate|free|ads", sort_by="popularity.desc",
+                         **{"release_date.gte": (hoy - timedelta(days=60)).isoformat(),
+                            "release_date.lte": hoy.isoformat()})
 
     def generos(self):
         return self._get("/genre/movie/list").get("genres", [])
