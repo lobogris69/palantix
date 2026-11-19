@@ -395,7 +395,7 @@
                 <visible>Control.HasFocus(200)</visible>
                 <animation effect="slide" start="-300,0" end="0,0" time="200" tween="cubic" easing="out">Visible</animation></control>
             <control type="list" id="200">
-                <left>0</left><top>300</top><width>420</width><height>700</height>
+                <left>0</left><top>176</top><width>420</width><height>880</height>
                 <onright>9000</onright><orientation>vertical</orientation>
                 <itemlayout width="420" height="76">
                     <control type="image"><left>33</left><top>18</top><width>44</width><height>44</height><texture colordiffuse="99FFFFFF">$INFO[ListItem.Icon]</texture></control>

@@ -224,7 +224,7 @@ filas = inicio.datos_filas(tempfile.mkdtemp(), None, url)
 comprobar("inicio: sin clave de TMDB no se rompe (filas vacías)", all(v == [] for v in filas.values()))
 comprobar("inicio: menú lateral con Buscar, Películas, Series... y Menú clásico",
           [m[0] for m in inicio.menu(url)] == ["Inicio", "Buscar", "Películas", "Series", "Mis series", "Mi lista",
-                                                "Mis listas", "Ajustes", "Actualizar", "Menú clásico"])
+                                                "Mis listas", "Ajustes", "Actualizar", "Menú clásico", "Salir"])
 
 print("\n%s" % ("TODO CORRECTO" if not fallos else "%d FALLOS" % fallos))
 sys.exit(1 if fallos else 0)

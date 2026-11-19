@@ -144,7 +144,8 @@ def menu(url, con_trakt=False):
         m.append(("Trakt", "DefaultAddonService.png", "carpeta", url(accion="trakt")))
     m += [("Ajustes", "DefaultAddonService.png", "ajustes", ""),
           ("Actualizar", "DefaultAddonsUpdates.png", "carpeta", url(accion="actualizar")),
-          ("Menú clásico", "DefaultFolder.png", "carpeta", url(accion="clasico"))]
+          ("Menú clásico", "DefaultFolder.png", "carpeta", url(accion="clasico")),
+          ("Salir", "DefaultFolderBack.png", "salir", "")]
     return m
 
 
@@ -208,6 +209,9 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print):
             tipo, destino = item.getProperty("tipo"), item.getProperty("url")
             if tipo == "inicio":
                 self.setFocusId(9000)
+            elif tipo == "salir":  # cerrar Palantix y volver a la pantalla principal de Kodi
+                self.close()
+                xbmc.executebuiltin("ActivateWindow(Home)")
             elif tipo == "ajustes":
                 addon.openSettings()
             elif tipo == "reproducir" or "accion=actualizar" in destino:
