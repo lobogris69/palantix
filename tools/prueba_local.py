@@ -119,7 +119,7 @@ _mod("xbmcgui", ListItem=ListItem, NOTIFICATION_INFO=0, Window=_Ventana,
                                                  update=lambda *a: None, iscanceled=lambda: False),
      Dialog=lambda: types.SimpleNamespace(
          notification=lambda t, m, *a: REGISTRO["avisos"].append(m), ok=lambda *a: None,
-         input=lambda *a: "", contextmenu=lambda ops: (print("   MENÚ:", ops), REGISTRO.get("menu", 0))[1], select=lambda t, ops: (print("   SELECTOR:", ops), REGISTRO["select"])[1]))
+         input=lambda *a: REGISTRO.get("input", ""), contextmenu=lambda ops: (print("   MENÚ:", ops), REGISTRO.get("menu", 0))[1], select=lambda t, ops: (print("   SELECTOR:", ops), REGISTRO["select"])[1]))
 _mod("xbmcplugin", SORT_METHOD_LABEL=1, SORT_METHOD_VIDEO_YEAR=2, SORT_METHOD_UNSORTED=0,
      addDirectoryItem=lambda h, u, li, isFolder=False: REGISTRO["items"].append((li.label, u)),
      addDirectoryItems=lambda h, its, n=0: REGISTRO["items"].extend((li.label, u) for u, li, _ in its),
@@ -350,6 +350,18 @@ r = abrir("?" + urlencode({"accion": "reproducir", "id": 653, "titulo": "Nosfera
 comprobar("desde el principio: sin punto de inicio", r["resuelto"][0] and "StartOffset" not in REGISTRO["li"].props)
 comprobar("progreso: al 95 % se da por vista y desaparece", pg.apuntar(TMP, pm, 5400, 5640) == "borrado" and not pg.peliculas(TMP))
 REGISTRO["menu"] = 0
+
+# ---------------------------------------------------------------- clave de TMDB (fallo visto en la tele)
+AJUSTES["tmdb_key"] = ""
+REGISTRO["input"] = "  CLAVE-NUEVA \n"
+r = abrir("?accion=s_tendencias")
+comprobar("sin clave: la pide en un cuadro, la limpia, la guarda y carga el catálogo al momento",
+          AJUSTES["tmdb_key"] == "CLAVE-NUEVA" and r["items"] and r["items"][0][0].startswith("Ficción"))
+REGISTRO["input"] = ""
+AJUSTES["tmdb_key"] = ""
+r = abrir("?accion=s_tendencias")
+comprobar("sin clave y sin escribir nada: no se cuelga", r["items"] == [])
+AJUSTES["tmdb_key"] = "clave-prueba"
 
 # ---------------------------------------------------------------- aviso de caducidad
 from resources.lib import debrid as dbr  # noqa: E402

@@ -145,7 +145,7 @@ def avisar_caducidad():
 def comprobar_novedades():
     """Refresca las series en seguimiento y avisa de cada capítulo nuevo."""
     addon = xbmcaddon.Addon()
-    clave = addon.getSetting("tmdb_key").strip()
+    clave = "".join(addon.getSetting("tmdb_key").split())
     if not clave or addon.getSetting("aviso_novedades") == "false":
         return
     try:

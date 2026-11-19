@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <settings>
     <category label="General">
-        <setting id="tmdb_key" type="text" label="Clave de la API de TMDB (gratis en themoviedb.org)" default=""/>
+        <setting id="tmdb_key" type="text" label="Clave de TMDB" default=""/>
+        <setting type="action" label="Escribir o comprobar la clave de TMDB" action="RunPlugin(plugin://plugin.video.palantix/?accion=tmdb_clave)"/>
         <setting id="idioma" type="text" label="Idioma del catálogo" default="es-ES"/>
         <setting id="region" type="text" label="Región" default="ES"/>
     </category>

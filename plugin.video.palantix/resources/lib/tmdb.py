@@ -20,6 +20,27 @@ SAGAS = ["Harry Potter", "El Señor de los Anillos", "Star Wars", "Marvel Los Ve
          "Terminator", "Alien", "Rocky", "Mad Max", "Ocean's", "Torrente", "Ice Age", "Minions"]
 
 
+def es_token(clave):
+    return clave.startswith("eyJ") and clave.count(".") == 2
+
+
+def limpiar_clave(texto):
+    """Quita espacios, saltos y comillas que se cuelan al pegar o teclear la clave."""
+    return "".join(texto.split()).strip("\"'")
+
+
+def validar(clave):
+    """True si TMDB acepta la clave, False si la rechaza, None si no se pudo comprobar (sin Internet)."""
+    import urllib.error
+    try:
+        TMDB(clave)._get("/configuration")
+        return True
+    except urllib.error.HTTPError as e:
+        return False if e.code in (401, 403) else None
+    except Exception:
+        return None
+
+
 class TMDB:
     def __init__(self, api_key, idioma="es-ES", region="ES", orden="popularidad"):
         self.key = api_key
@@ -37,8 +58,13 @@ class TMDB:
         return self._get("/discover/%s" % tipo, page=page, **filtros)
 
     def _get(self, ruta, **params):
-        params.update(api_key=self.key, language=self.idioma)
-        return get_json(API + ruta, params)
+        params.setdefault("language", self.idioma)
+        cab = None
+        if es_token(self.key):  # «Token de acceso de lectura» (v4): va en la cabecera
+            cab = {"Authorization": "Bearer " + self.key}
+        else:                   # «Clave de la API» (v3): va en la dirección
+            params["api_key"] = self.key
+        return get_json(API + ruta, params, cabeceras=cab)
 
     # --- Listados -------------------------------------------------------
     def tendencias(self, page=1):
@@ -108,8 +134,7 @@ class TMDB:
     def trailer_youtube(self, tmdb_id, tipo="movie"):
         """Clave de YouTube del tráiler: primero en el idioma del catálogo, si no en inglés."""
         for idioma in (self.idioma, "en-US"):
-            videos = get_json(API + "/%s/%s/videos" % (tipo, tmdb_id),
-                              {"api_key": self.key, "language": idioma}).get("results", [])
+            videos = self._get("/%s/%s/videos" % (tipo, tmdb_id), language=idioma).get("results", [])
             for v in videos:
                 if v.get("site") == "YouTube" and v.get("type") in ("Trailer", "Teaser"):
                     return v["key"]

@@ -56,12 +56,47 @@ def ttl_listas():
     return max(1, ajuste_int("cache_min", 60)) * 60
 
 
+def clave_tmdb():
+    # instancia NUEVA del addon: la global guarda los valores de cuando arrancó y no ve lo recién guardado
+    return tmdb_mod.limpiar_clave(xbmcaddon.Addon().getSetting("tmdb_key"))
+
+
+def pedir_clave_tmdb():
+    """Pide la clave en un cuadro directo, la comprueba con TMDB y la guarda."""
+    for _ in range(3):
+        texto = xbmcgui.Dialog().input("Clave de TMDB (la «Clave de la API» corta o el «Token» largo)")
+        clave = tmdb_mod.limpiar_clave(texto or "")
+        if not clave:
+            return None
+        ok = tmdb_mod.validar(clave)
+        if ok is False:
+            xbmcgui.Dialog().ok("Palantix", "TMDB no acepta esa clave.\nRevísala en themoviedb.org > Ajustes > API "
+                                            "y vuelve a escribirla.")
+            continue
+        xbmcaddon.Addon().setSetting("tmdb_key", clave)
+        aviso("Clave de TMDB guardada" + ("" if ok else " (no se pudo comprobar: ¿hay Internet?)"))
+        return clave
+    return None
+
+
+def comprobar_tmdb():
+    clave = clave_tmdb()
+    if not clave:
+        return pedir_clave_tmdb()
+    ok = tmdb_mod.validar(clave)
+    if ok:
+        xbmcgui.Dialog().ok("Palantix", "La clave de TMDB funciona correctamente.")
+    elif ok is False:
+        xbmcgui.Dialog().ok("Palantix", "TMDB no acepta la clave guardada. Escríbela de nuevo.")
+        pedir_clave_tmdb()
+    else:
+        xbmcgui.Dialog().ok("Palantix", "No se pudo conectar con TMDB. ¿Hay Internet?")
+
+
 def api(obligatoria=True):
-    clave = ADDON.getSetting("tmdb_key").strip()
+    clave = clave_tmdb()
     if not clave and obligatoria:
-        xbmcgui.Dialog().ok("Palantix", "Falta la clave gratuita de TMDB.\nTe abro los ajustes para pegarla.")
-        ADDON.openSettings()
-        clave = ADDON.getSetting("tmdb_key").strip()
+        clave = pedir_clave_tmdb()
     if not clave:
         return None
     i = ajuste_int("orden_listas", 0)
@@ -906,6 +941,7 @@ SIN_TMDB = {
     "quitar_medias": quitar_medias,
     "trailer": trailer,
     "ajustes": ADDON.openSettings,
+    "tmdb_clave": comprobar_tmdb,
 }
 
 
