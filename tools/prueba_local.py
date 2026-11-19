@@ -40,7 +40,7 @@ json.dump([
 # ---------------------------------------------------------------- Kodi simulado
 AJUSTES = {"tmdb_key": "clave-prueba", "lista_1": LISTA_JSON, "lista_2": LISTA_M3U, "lista_3": LISTA_SERIES,
            "cache_min": "60", "prov_archive_org": "false", "prov_listas": "true",
-           "idioma_pref": "0", "calidad_max": "0", "solo_idioma": "false", "autoplay": "false", "inicio_plataforma": "false"}
+           "idioma_pref": "0", "calidad_max": "0", "solo_idioma": "false", "autoplay": "false", "inicio_plataforma": "false", "preguntado_idioma": "true"}
 TMDB_FALSO = {
     "/discover/movie": {"page": 1, "total_pages": 3, "results": [{"id": 1, "title": "Peli A", "release_date": "2001-01-01"}]},
     "/search/tv": {"page": 1, "total_pages": 1, "results": [
@@ -109,7 +109,7 @@ def _mod(nombre, **attrs):
 
 
 _mod("xbmc", LOGINFO=1, log=lambda m, l=0: print("   LOG", m),
-     executebuiltin=lambda c: REGISTRO["builtin"].append(c), sleep=lambda ms: None, Player=_Player, getInfoLabel=lambda k: "", getSkinDir=lambda: "skin.estuary",
+     executebuiltin=lambda c: REGISTRO["builtin"].append(c), sleep=lambda ms: None, Player=_Player, getInfoLabel=lambda k: "", getSkinDir=lambda: "skin.estuary", getLanguage=lambda *a: "es", ISO_639_1=0, executeJSONRPC=lambda q: "{\"result\":true}",
      Monitor=lambda: types.SimpleNamespace(abortRequested=lambda: True, waitForAbort=lambda s: True), getCondVisibility=lambda c: False)
 _mod("xbmcvfs", translatePath=lambda p: TMP)
 _mod("xbmcaddon", Addon=lambda: types.SimpleNamespace(
@@ -155,7 +155,11 @@ r = abrir("")
 comprobar("menú principal: Películas, Series, Continuar viendo, Seguimiento, Favoritas, Listas, Ajustes, Actualizar", len(r["items"]) == 8)
 
 r = abrir("?accion=listas")
-comprobar("Mis listas muestra las 3 listas", len(r["items"]) == 3)
+etiquetas_ = [i[0] for i in r["items"]]
+comprobar("Mis listas: «Añadir», las 3 listas (pasadas desde Ajustes) con su nº de títulos y la ayuda",
+          len(etiquetas_) == 5 and "Añadir una lista" in etiquetas_[0] and "2 títulos" in etiquetas_[1]
+          and "1 título" in etiquetas_[2] and "Qué dirección" in etiquetas_[-1])
+comprobar("Mis listas: las casillas antiguas de Ajustes quedan vacías tras pasarlas", AJUSTES.get("lista_1") == "")
 
 r = abrir("?accion=listas&n=1")
 comprobar("lista JSON agrupada (Todas + Comedia + Terror)", [i[0] for i in r["items"]] == ["[Todas] (2)", "Comedia (1)", "Terror (1)"])
@@ -362,6 +366,30 @@ AJUSTES["tmdb_key"] = ""
 r = abrir("?accion=s_tendencias")
 comprobar("sin clave y sin escribir nada: no se cuelga", r["items"] == [])
 AJUSTES["tmdb_key"] = "clave-prueba"
+
+# ---------------------------------------------------------------- añadir / quitar listas
+NUEVA = os.path.join(TMP, "nueva.m3u")
+open(NUEVA, "w", encoding="utf-8").write("#EXTM3U\n#EXTINF:-1,Peli Uno (2001)\nhttps://x/1.mp4\n#EXTINF:-1,Peli Dos (2002)\nhttps://x/2.mp4\n")
+WEB = os.path.join(TMP, "web.html")
+open(WEB, "w", encoding="utf-8").write("<html><body>Una web normal</body></html>")
+from resources.lib import mislistas as ml  # noqa: E402
+antes = len(ml.leer(TMP))
+REGISTRO["input"] = WEB
+abrir("?accion=lista_nueva")
+comprobar("añadir lista: una página web se rechaza con explicación", len(ml.leer(TMP)) == antes)
+REGISTRO["input"] = NUEVA
+abrir("?accion=lista_nueva")
+comprobar("añadir lista: un M3U válido se añade", len(ml.leer(TMP)) == antes + 1 and ml.leer(TMP)[-1]["origen"] == NUEVA)
+abrir("?accion=lista_nueva")
+comprobar("añadir lista: la misma dirección no se duplica", len(ml.leer(TMP)) == antes + 1)
+REGISTRO["input"] = "Pelis de prueba"
+abrir("?accion=lista_renombrar&i=%d" % antes)
+comprobar("renombrar lista", ml.leer(TMP)[-1]["nombre"] == "Pelis de prueba")
+REGISTRO["input"] = ""
+ml.quitar(TMP, antes)
+comprobar("quitar lista", len(ml.leer(TMP)) == antes)
+from resources.lib import tmdb as _t  # noqa: E402
+comprobar("idioma del catálogo: Latinoamérica = es-MX / MX", _t.idioma_de(1) == ("es-MX", "MX") and _t.idioma_de("x") == ("es-ES", "ES"))
 
 # ---------------------------------------------------------------- aviso de caducidad
 from resources.lib import debrid as dbr  # noqa: E402

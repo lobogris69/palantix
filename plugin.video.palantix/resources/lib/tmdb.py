@@ -20,6 +20,19 @@ SAGAS = ["Harry Potter", "El Señor de los Anillos", "Star Wars", "Marvel Los Ve
          "Terminator", "Alien", "Rocky", "Mad Max", "Ocean's", "Torrente", "Ice Age", "Minions"]
 
 
+# Idiomas del catálogo (Ajustes > General): (nombre, idioma TMDB, región)
+IDIOMAS = [("Español (España)", "es-ES", "ES"), ("Español (Latinoamérica)", "es-MX", "MX"), ("English", "en-US", "US"),
+           ("Français", "fr-FR", "FR"), ("Italiano", "it-IT", "IT"), ("Português", "pt-PT", "PT"), ("Deutsch", "de-DE", "DE")]
+
+
+def idioma_de(indice):
+    try:
+        _, idioma, region = IDIOMAS[int(indice)]
+    except (ValueError, IndexError, TypeError):
+        _, idioma, region = IDIOMAS[0]
+    return idioma, region
+
+
 def es_token(clave):
     return clave.startswith("eyJ") and clave.count(".") == 2
 

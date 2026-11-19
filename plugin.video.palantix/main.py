@@ -12,7 +12,7 @@ import xbmcplugin
 import xbmcvfs
 
 from resources.lib import etiquetas, listas
-from resources.lib import actualizar, debrid, inicio, novedades, progreso, seguimiento, subtitulos, trakt
+from resources.lib import actualizar, debrid, inicio, mislistas, novedades, progreso, seguimiento, subtitulos, trakt
 from resources.lib import tmdb as tmdb_mod
 from resources.lib.providers import ListaURL, Peli, buscar_fuentes
 
@@ -48,8 +48,18 @@ def ajuste_int(clave, defecto):
         return defecto
 
 
+def mis_listas_guardadas():
+    """Listas del usuario. La primera vez pasa aquí las direcciones de las casillas antiguas de Ajustes."""
+    antiguas = [ADDON.getSetting("lista_%d" % i) for i in (1, 2, 3)]
+    if any(a.strip() for a in antiguas):
+        mislistas.migrar(PERFIL, antiguas)
+        for i in (1, 2, 3):
+            ADDON.setSetting("lista_%d" % i, "")
+    return mislistas.leer(PERFIL)
+
+
 def origenes_listas():
-    return [ADDON.getSetting("lista_%d" % i).strip() for i in (1, 2, 3)]
+    return [l["origen"] for l in mis_listas_guardadas()]
 
 
 def ttl_listas():
@@ -100,7 +110,8 @@ def api(obligatoria=True):
     if not clave:
         return None
     i = ajuste_int("orden_listas", 0)
-    return tmdb_mod.TMDB(clave, ADDON.getSetting("idioma") or "es-ES", ADDON.getSetting("region") or "ES",
+    idioma, region = tmdb_mod.idioma_de(ADDON.getSetting("idioma_cat") or 0)
+    return tmdb_mod.TMDB(clave, idioma, region,
                          orden=ORDENES[i] if 0 <= i < len(ORDENES) else "popularidad")
 
 
@@ -764,14 +775,23 @@ def mis_listas():
     """Nivel 1: las listas configuradas. Nivel 2: sus grupos. Nivel 3: las películas y capítulos."""
     n = PARAMS.get("n")
     if not n:
-        origenes = origenes_listas()
-        if not any(origenes):
-            xbmcgui.Dialog().ok("Palantix", "No tienes listas.\nPon el enlace en Ajustes > Mis listas.")
-            ADDON.openSettings()
-        for i, o in enumerate(origenes, 1):
-            if o:
-                carpeta("Lista %d · %s" % (i, o[-50:]), url(accion="listas", n=i))
-        return xbmcplugin.endOfDirectory(HANDLE)
+        carpeta("[B]➕  Añadir una lista[/B]", url(accion="lista_nueva"), "DefaultAddSource.png")
+        for i, l in enumerate(mis_listas_guardadas(), 1):
+            try:
+                total = len(listas.cargar(l["origen"], CACHE, ttl_listas()))
+                cola = color("%d título%s" % (total, "" if total == 1 else "s"), AZUL)
+            except Exception:
+                cola = color("no se puede leer", "red")
+            li = xbmcgui.ListItem("%s   %s" % (l["nombre"], cola))
+            li.setArt({"icon": "DefaultPlaylist.png", "thumb": LOGO, "fanart": FONDO})
+            li.getVideoInfoTag().setPlot("[B]Dirección:[/B]\n%s" % l["origen"])
+            li.addContextMenuItems([
+                ("Renombrar", "RunPlugin(%s)" % url(accion="lista_renombrar", i=i - 1)),
+                ("Recargar ahora", "RunPlugin(%s)" % url(accion="lista_recargar", i=i - 1)),
+                ("Quitar esta lista", "RunPlugin(%s)" % url(accion="lista_quitar", i=i - 1))])
+            xbmcplugin.addDirectoryItem(HANDLE, url(accion="listas", n=i), li, True)
+        carpeta("ⓘ  Qué dirección puedo poner", url(accion="lista_ayuda"), "DefaultIconInfo.png")
+        return xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
     try:
         items = listas.cargar(origenes_listas()[int(n) - 1], CACHE, ttl_listas())
@@ -796,6 +816,90 @@ def mis_listas():
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_UNSORTED)
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_VIDEO_YEAR)
     xbmcplugin.endOfDirectory(HANDLE)
+
+
+def lista_nueva():
+    origen = (xbmcgui.Dialog().input("Dirección de la lista (empieza por http o https)") or "").strip()
+    if not origen:
+        return
+    barra = xbmcgui.DialogProgress()
+    barra.create("Palantix", "Comprobando la lista...")
+    try:
+        texto = listas.descargar(origen)
+        items = listas.parsear(texto)
+    except Exception as e:
+        barra.close()
+        log("Lista nueva: %s" % e)
+        return xbmcgui.Dialog().ok("Palantix", "Esa dirección no es una lista que Palantix pueda leer.\n"
+                                   "Tiene que ser un fichero M3U o JSON, no una página web.\n"
+                                   "Mira «Qué dirección puedo poner» en Mis listas.")
+    barra.close()
+    if not items:
+        return xbmcgui.Dialog().ok("Palantix", "La lista se lee, pero no tiene ningún título con enlace.")
+    sugerido = mislistas.nombre_por_defecto(origen)
+    try:
+        sugerido = json.loads(texto.lstrip("\ufeff")).get("nombre") or sugerido
+    except (ValueError, AttributeError):
+        pass
+    nombre = xbmcgui.Dialog().input("Ponle un nombre a la lista", sugerido) or sugerido
+    if not mislistas.anadir(PERFIL, nombre, origen):
+        return aviso("Esa lista ya estaba añadida")
+    xbmcgui.Dialog().ok("Palantix", "Lista «%s» añadida: %d título%s." % (nombre, len(items), "" if len(items) == 1 else "s"))
+    xbmc.executebuiltin("Container.Refresh")
+
+
+def lista_renombrar():
+    i = int(PARAMS["i"])
+    actual = mis_listas_guardadas()[i]["nombre"]
+    nombre = xbmcgui.Dialog().input("Nuevo nombre", actual)
+    if nombre:
+        mislistas.renombrar(PERFIL, i, nombre)
+        xbmc.executebuiltin("Container.Refresh")
+
+
+def lista_recargar():
+    import hashlib
+    origen = mis_listas_guardadas()[int(PARAMS["i"])]["origen"]
+    ruta = os.path.join(CACHE, "lista_%s.txt" % hashlib.md5(origen.encode()).hexdigest())
+    if os.path.exists(ruta):
+        os.remove(ruta)
+    aviso("Lista recargada")
+    xbmc.executebuiltin("Container.Refresh")
+
+
+def lista_quitar():
+    i = int(PARAMS["i"])
+    l = mis_listas_guardadas()[i]
+    if xbmcgui.Dialog().yesno("Palantix", "¿Quitar la lista «%s»?" % l["nombre"]):
+        mislistas.quitar(PERFIL, i)
+        xbmc.executebuiltin("Container.Refresh")
+
+
+def kodi_en_espanol(preguntar=False):
+    """Pone todo Kodi (botones, menús, ajustes) en español: instala el idioma si falta y lo activa."""
+    if preguntar and not xbmcgui.Dialog().yesno("Palantix", "Kodi está en otro idioma (por eso ves «Settings», «Cancel»...).\n"
+                                                "¿Lo pongo todo en español?"):
+        return
+    paquete = "resource.language.es_es"
+    if not xbmc.getCondVisibility("System.HasAddon(%s)" % paquete):
+        xbmc.executebuiltin("InstallAddon(%s)" % paquete, True)
+        for _ in range(90):
+            if xbmc.getCondVisibility("System.HasAddon(%s)" % paquete):
+                break
+            xbmc.sleep(1000)
+    respuesta = xbmc.executeJSONRPC(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "Settings.SetSettingValue",
+                                                "params": {"setting": "locale.language", "value": paquete}}))
+    log("Idioma de Kodi: %s" % respuesta)
+    if '"result":true' not in respuesta.replace(" ", ""):
+        xbmcgui.Dialog().ok("Palantix", "No se pudo cambiar solo. Hazlo a mano:\nSettings > Interface > Regional > "
+                                        "Language > Spanish.")
+
+
+def ofrecer_espanol_una_vez():
+    if ADDON.getSetting("preguntado_idioma") == "true" or xbmc.getLanguage(xbmc.ISO_639_1) == "es":
+        return
+    ADDON.setSetting("preguntado_idioma", "true")
+    kodi_en_espanol(preguntar=True)
 
 
 def trailer():
@@ -969,6 +1073,12 @@ SIN_TMDB = {
     "ajustes": ADDON.openSettings,
     "tmdb_clave": comprobar_tmdb,
     "actualizar": lambda: buscar_actualizacion(),
+    "lista_nueva": lambda: lista_nueva(),
+    "lista_renombrar": lambda: lista_renombrar(),
+    "lista_recargar": lambda: lista_recargar(),
+    "lista_quitar": lambda: lista_quitar(),
+    "lista_ayuda": lambda: xbmcgui.Dialog().textviewer("Mis listas", mislistas.AYUDA),
+    "kodi_es": lambda: kodi_en_espanol(),
 }
 
 
@@ -1044,6 +1154,10 @@ def abrir_inicio():
 def main():
     accion = PARAMS.get("accion")
     if not accion:
+        try:
+            ofrecer_espanol_una_vez()
+        except Exception as e:
+            log("Idioma: %s" % e)
         if ADDON.getSetting("inicio_plataforma") != "false":
             return abrir_inicio()
         return menu()

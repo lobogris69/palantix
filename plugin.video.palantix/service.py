@@ -152,7 +152,8 @@ def comprobar_novedades():
         import xbmcvfs
         from resources.lib import novedades, tmdb
         perfil = xbmcvfs.translatePath(addon.getAddonInfo("profile"))
-        t = tmdb.TMDB(clave, addon.getSetting("idioma") or "es-ES")
+        idioma, region = tmdb.idioma_de(addon.getSetting("idioma_cat") or 0)
+        t = tmdb.TMDB(clave, idioma, region)
         for titulo, ult in novedades.refrescar(perfil, t, log=log):
             texto = "Nuevo capítulo de %s: %dx%02d" % (titulo, ult["s"], ult["e"])
             xbmcgui.Dialog().notification("Palantix", texto, xbmcaddon.Addon().getAddonInfo("icon"), 10000)

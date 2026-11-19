@@ -5,8 +5,9 @@
         <setting type="action" label="Escribir o comprobar la clave de TMDB" action="RunPlugin(plugin://plugin.video.palantix/?accion=tmdb_clave)"/>
         <setting id="auto_actualizar" type="bool" label="Actualizar Palantix solo cuando haya versión nueva" default="true"/>
         <setting type="action" label="Buscar actualización ahora" action="RunPlugin(plugin://plugin.video.palantix/?accion=actualizar)"/>
-        <setting id="idioma" type="text" label="Idioma del catálogo" default="es-ES"/>
-        <setting id="region" type="text" label="Región" default="ES"/>
+        <setting id="idioma_cat" type="enum" label="Idioma de títulos y sinopsis" values="Español (España)|Español (Latinoamérica)|English|Français|Italiano|Português|Deutsch" default="0"/>
+        <setting type="action" label="Poner todo Kodi en español (botones, menús y ajustes)" action="RunPlugin(plugin://plugin.video.palantix/?accion=kodi_es)"/>
+        <setting id="preguntado_idioma" type="text" label="" default="" visible="false"/>
     </category>
     <category label="Catálogo">
         <setting id="inicio_plataforma" type="bool" label="Pantalla de inicio con carteles y filas de carátulas" default="true"/>
@@ -38,9 +39,10 @@
         <setting id="os_clave" type="text" label="Contraseña" default="" option="hidden"/>
     </category>
     <category label="Mis listas">
-        <setting id="lista_1" type="text" label="Lista 1 (enlace http/https o ruta a fichero JSON/M3U)" default=""/>
-        <setting id="lista_2" type="text" label="Lista 2" default=""/>
-        <setting id="lista_3" type="text" label="Lista 3" default=""/>
+        <setting type="action" label="Añadir, ver o quitar mis listas" action="ActivateWindow(Videos,plugin://plugin.video.palantix/?accion=listas,return)"/>
+        <setting id="lista_1" type="text" label="" default="" visible="false"/>
+        <setting id="lista_2" type="text" label="" default="" visible="false"/>
+        <setting id="lista_3" type="text" label="" default="" visible="false"/>
         <setting id="cache_min" type="number" label="Refrescar listas cada (minutos)" default="60"/>
     </category>
     <category label="Servicios Debrid">
