@@ -163,17 +163,16 @@ def comprobar_novedades():
 
 
 def actualizar_solo():
-    """Si hay versión nueva de Palantix, avisa y pide a Kodi que la instale ya (sin esperar al día siguiente)."""
+    """Pide a Kodi que refresque el repositorio cuando Palantix tiene una versión nueva."""
     addon = xbmcaddon.Addon()
     if addon.getSetting("auto_actualizar") == "false":
         return
     try:
         from resources.lib import actualizar
         local, remota = addon.getAddonInfo("version"), actualizar.version_remota()
-        if actualizar.hay_nueva(local, remota):
-            xbmcgui.Dialog().notification("Palantix", "Actualizando a la versión %s..." % remota,
+        if actualizar.hay_nueva(local, remota) and actualizar.pedir_a_kodi(log):
+            xbmcgui.Dialog().notification("Palantix", "Kodi está buscando la actualización %s" % remota,
                                           addon.getAddonInfo("icon"), 8000)
-            actualizar.pedir_a_kodi(log)
     except Exception as e:
         log("Actualización: %s" % e)
 

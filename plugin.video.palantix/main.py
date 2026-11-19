@@ -1198,11 +1198,19 @@ def buscar_actualizacion():
         remota = actualizar.version_remota()
     except Exception as e:
         return xbmcgui.Dialog().ok("Palantix", "No se pudo comprobar si hay versión nueva (¿hay Internet?).\n%s" % e)
+    if not remota:
+        return xbmcgui.Dialog().ok("Palantix", "No se pudo leer la versión publicada en el repositorio.")
     if not actualizar.hay_nueva(local, remota):
         return xbmcgui.Dialog().ok("Palantix", "Ya tienes la última versión: %s" % local)
-    actualizar.pedir_a_kodi(log)
-    xbmcgui.Dialog().ok("Palantix", "Hay versión nueva: %s (tienes la %s).\n"
-                        "Se está instalando sola; en un minuto vuelve a abrir Palantix." % (remota, local))
+    if actualizar.pedir_a_kodi(log):
+        pasos = ("Kodi está comprobando las actualizaciones del repositorio. "
+                 "Si la instalación automática no se inicia, abre la ficha de Palantix en "
+                 "Complementos → Mis complementos → Complementos de vídeo y selecciona Actualizar.")
+    else:
+        pasos = ("Activa Repositorio Palantix en Complementos → Mis complementos → Repositorios de complementos. "
+                 "Si no aparece, instálalo desde la fuente de Palantix y vuelve a buscar la actualización.")
+    xbmcgui.Dialog().ok("Palantix", "Hay una versión nueva (%s). Tienes la %s.\n%s" % (remota, local, pasos))
+
 
 
 def abrir_inicio():
