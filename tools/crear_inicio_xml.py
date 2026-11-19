@@ -23,16 +23,19 @@ MENU = 200
 TAM = {"poster": (196, 294), "ancha": (352, 198)}
 
 
-def capa_item(forma, enfocado):
+def capa_item(forma, enfocado, fid=0):
     w, h = TAM[forma]
     mascara = "mascara_poster.png" if forma == "poster" else "mascara_ancha.png"
     arte = "$INFO[ListItem.Art(poster)]" if forma == "poster" else "$INFO[ListItem.Art(thumb)]"
-    zoom = ('<animation effect="zoom" start="100" end="108" center="%d,%d" time="180" tween="cubic" easing="out">Focus</animation>'
-            % (w // 2 + 10, h // 2 + 18)) if enfocado else ""
+    activo = "Control.HasFocus(%d)" % fid
+    zoom = ('<animation effect="zoom" start="100" end="108" center="%d,%d" time="180" tween="cubic" easing="out" '
+            'reversible="true" condition="%s">Conditional</animation>' % (w // 2 + 10, h // 2 + 18, activo)) if enfocado else ""
     borde = ('<control type="image"><left>2</left><top>10</top><width>%d</width><height>%d</height>'
-             '<texture border="26" colordiffuse="%s">borde.png</texture></control>' % (w + 16, h + 16, ACENTO)) if enfocado else ""
+             '<texture border="26" colordiffuse="%s">borde.png</texture><visible>%s</visible>'
+             '<animation effect="fade" start="0" end="100" time="150">Visible</animation></control>'
+             % (w + 16, h + 16, ACENTO, activo)) if enfocado else ""
     sombra = ('<control type="image"><left>-20</left><top>-10</top><width>%d</width><height>%d</height>'
-              '<texture border="40">sombra.png</texture></control>' % (w + 56, h + 60)) if enfocado else ""
+              '<texture border="40">sombra.png</texture><visible>%s</visible></control>' % (w + 56, h + 60, activo)) if enfocado else ""
     progreso = ""
     titulo = ""
     if forma == "ancha":
@@ -43,6 +46,9 @@ def capa_item(forma, enfocado):
         titulo = ('<control type="label"><left>10</left><top>%d</top><width>%d</width><height>40</height>'
                   '<font>font12</font><textcolor>%s</textcolor><label>$INFO[ListItem.Label2]</label></control>'
                   % (h + 26, w, "FFFFFFFF" if enfocado else TEXTO2))
+        if enfocado:  # el título blanco solo en la fila activa
+            titulo = titulo.replace("<label>", "<label>").replace(
+                "</control>", "<textcolor>FFFFFFFF</textcolor></control>", 0)
     nuevo = ('<control type="group"><left>%d</left><top>20</top><visible>String.IsEqual(ListItem.Property(nuevo),1)</visible>'
              '<control type="image"><width>110</width><height>34</height><texture colordiffuse="FF1DB954">pildora.png</texture></control>'
              '<control type="label"><width>110</width><height>34</height><align>center</align><aligny>center</aligny>'
@@ -78,7 +84,7 @@ def fila(fid, forma, siguiente, anterior):
                 <itemlayout width="%(iw)d" height="%(alto)d">%(normal)s</itemlayout>
                 <focusedlayout width="%(iw)d" height="%(alto)d">%(foco)s</focusedlayout>
             </control>''' % {"lab": fid + 500, "id": fid, "alto": alto_item, "menu": MENU, "iw": w + 22,
-                             "normal": capa_item(forma, False), "foco": capa_item(forma, True)}
+                             "normal": capa_item(forma, False, fid), "foco": capa_item(forma, True, fid)}
 
 
 def cartel(fid):
@@ -94,25 +100,31 @@ def cartel(fid):
             </control>
             <control type="image"><width>1920</width><height>1080</height><texture>degradado_izq.png</texture></control>
             <control type="image"><top>380</top><width>1920</width><height>700</height><texture>degradado_abajo.png</texture></control>
-            <control type="label">
-                <left>150</left><top>150</top><width>1100</width><height>90</height>
-                <font>font52_title</font><textcolor>FFFFFFFF</textcolor><scroll>true</scroll>
-                <label>[B]$INFO[%(c)s.Label][/B]</label>
-            </control>
-            <control type="label">
-                <left>150</left><top>238</top><width>1100</width><height>40</height>
-                <font>font13</font><textcolor>%(acento)s</textcolor>
-                <label>[B]$INFO[%(c)s.Property(destacado)][/B]</label>
-            </control>
-            <control type="label">
-                <left>150</left><top>280</top><width>1100</width><height>40</height>
-                <font>font14</font><textcolor>%(t2)s</textcolor>
-                <label>$INFO[%(c)s.Property(info)]</label>
-            </control>
-            <control type="textbox">
-                <left>150</left><top>330</top><width>820</width><height>190</height>
-                <font>font13</font><textcolor>FFE4E6EE</textcolor>
-                <label>$INFO[%(c)s.Plot]</label>
+            <control type="grouplist">
+                <left>150</left><top>150</top><width>1100</width><height>400</height>
+                <orientation>vertical</orientation><itemgap>4</itemgap><usecontrolcoords>true</usecontrolcoords>
+                <control type="label">
+                    <width>1100</width><height>90</height>
+                    <font>font52_title</font><textcolor>FFFFFFFF</textcolor><scroll>true</scroll>
+                    <label>[B]$INFO[%(c)s.Label][/B]</label>
+                </control>
+                <control type="label">
+                    <width>1100</width><height>40</height>
+                    <font>font13</font><textcolor>%(acento)s</textcolor>
+                    <label>[B]$INFO[%(c)s.Property(destacado)][/B]</label>
+                    <visible>!String.IsEmpty(%(c)s.Property(destacado))</visible>
+                </control>
+                <control type="label">
+                    <width>1100</width><height>46</height>
+                    <font>font14</font><textcolor>%(t2)s</textcolor>
+                    <label>$INFO[%(c)s.Property(info)]</label>
+                </control>
+                <control type="textbox">
+                    <width>820</width><height>152</height>
+                    <font>font13</font><textcolor>FFE4E6EE</textcolor>
+                    <autoscroll delay="7000" time="4000" repeat="9000">true</autoscroll>
+                    <label>$INFO[%(c)s.Plot]</label>
+                </control>
             </control>
         </control>''' % {"id": fid, "c": c, "acento": ACENTO, "t2": TEXTO2}
 
