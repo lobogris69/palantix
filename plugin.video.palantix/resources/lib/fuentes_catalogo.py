@@ -56,9 +56,9 @@ def consulta(t, ajustes, listas_url, cache, log, fallo=lambda proveedor: None):
             except Exception:
                 fallo("Identificador IMDb de TMDB")
                 log("No se pudo obtener el identificador IMDb")
-        return buscar_fuentes(peli, activo=lambda _: archivo_activo, log=log, extra=extra, fallo=fallo)
+        return buscar_fuentes(peli, activo=lambda proveedor: proveedor != "archive_org" or archivo_activo, log=log, extra=extra, fallo=fallo)
 
-    return buscar, (archivo_activo, listas_url, manifiestos)
+    return buscar, (archivo_activo, listas_url, manifiestos, "cine_libre")
 
 
 def hay_fuentes(m, buscar, preferencias):

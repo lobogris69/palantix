@@ -152,7 +152,13 @@ def comprobar(nombre, cond):
 from urllib.parse import urlencode  # noqa: E402
 
 r = abrir("")
-comprobar("menú principal: Películas, Series, Continuar viendo, Seguimiento, Favoritas, Listas, Ajustes, Actualizar", len(r["items"]) == 8)
+comprobar("menú principal incluye Cine libre y documentales",
+          len(r["items"]) == 9 and any(i[0] == "Cine libre y documentales" for i in r["items"]))
+r = abrir("?accion=cine_libre")
+comprobar("cine libre: muestra categorías", any(i[0] == "Documentales" for i in r["items"]))
+r = abrir("?accion=cine_libre&g=Documentales")
+comprobar("cine libre: muestra el documental con reproducción directa",
+          any("The Eagle Has Landed" in i[0] and "accion=reproducir_directo" in i[1] for i in r["items"]))
 
 r = abrir("?accion=listas")
 etiquetas_ = [i[0] for i in r["items"]]

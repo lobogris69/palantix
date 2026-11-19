@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from . import novedades, progreso, seguimiento
 from .tmdb import TMDB
+from .providers.cine_libre import TITULO as TITULO_CINE_LIBRE
 
 FILAS = [
     (101, "Continuar viendo"),
@@ -217,6 +218,7 @@ def menu(url, con_trakt=False):
          ("Series", "DefaultTVShows.png", "pestana", "series"),
          ("Mis series", "DefaultInProgressShows.png", "carpeta", url(accion="seguir")),
          ("Mi lista", "DefaultFavourites.png", "carpeta", url(accion="favoritas")),
+         (TITULO_CINE_LIBRE, "DefaultMovies.png", "carpeta", url(accion="cine_libre")),
          ("Mis listas", "DefaultPlaylist.png", "carpeta", url(accion="listas"))]
     if con_trakt:
         m.append(("Trakt", "DefaultAddonService.png", "carpeta", url(accion="trakt")))

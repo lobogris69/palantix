@@ -100,7 +100,7 @@ def _normaliza_item(d):
         "titulo": titulo,
         "titulo_original": (d.get("titulo_original") or d.get("original_title") or "").strip(),
         "anio": anio,
-        "tmdb_id": _entero(d.get("tmdb_id") or d.get("tmdb-id")) if str(d.get("tmdb_id") or d.get("tmdb-id") or "").isdigit() else 0,
+        "tmdb_id": _num(d.get("tmdb_id") or d.get("tmdb-id")) if str(d.get("tmdb_id") or d.get("tmdb-id") or "").isdigit() else 0,
         "imdb_id": (d.get("imdb_id") or d.get("imdb-id") or "").strip(),
         "url": (d.get("url") or "").strip(),
         "calidad": (d.get("calidad") or d.get("quality") or "").strip(),
@@ -108,6 +108,10 @@ def _normaliza_item(d):
         "poster": (d.get("poster") or d.get("tvg-logo") or "").strip(),
         "fanart": (d.get("fanart") or "").strip(),
         "sinopsis": (d.get("sinopsis") or d.get("overview") or "").strip(),
+        "autor": (d.get("autor") or "").strip(),
+        "licencia": (d.get("licencia") or "").strip(),
+        "licencia_url": (d.get("licencia_url") or "").strip(),
+        "ficha_origen": (d.get("ficha_origen") or "").strip(),
     }
 
 

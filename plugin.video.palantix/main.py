@@ -15,6 +15,7 @@ from resources.lib import disponibilidad, etiquetas, fuentes_catalogo, listas, p
 from resources.lib import actualizar, debrid, inicio, mislistas, novedades, progreso, seguimiento, subtitulos, trakt
 from resources.lib import tmdb as tmdb_mod
 from resources.lib.providers import Peli
+from resources.lib.providers import cine_libre
 from resources.lib.providers.stremio import Stremio
 
 ADDON = xbmcaddon.Addon()
@@ -417,7 +418,10 @@ def ficha_lista(it):
     li.setArt({"poster": it["poster"], "thumb": it["poster"], "fanart": it["fanart"]})
     tag = li.getVideoInfoTag()
     tag.setTitle(etiqueta)
-    tag.setPlot(it["sinopsis"])
+    creditos = [("%s: %s" % (nombre, it[clave])) for nombre, clave in (
+        ("Autor", "autor"), ("Licencia", "licencia"), ("Condiciones", "licencia_url"), ("Ficha original", "ficha_origen")
+    ) if it.get(clave)]
+    tag.setPlot("\n".join(filter(None, (it["sinopsis"], *creditos))))
     if it["tipo"] == "episodio":
         tag.setMediaType("episode")
         tag.setTvShowTitle(it["titulo"])
@@ -469,6 +473,7 @@ def menu():
             except Exception as e:
                 log("Trakt listas: %s" % e)
     carpeta("Mis favoritas", url(accion="favoritas"), "DefaultFavourites.png")
+    carpeta(cine_libre.TITULO, url(accion="cine_libre"), "DefaultMovies.png")
     carpeta("Mis listas", url(accion="listas"), "DefaultPlaylist.png")
     carpeta("Ajustes", url(accion="ajustes"), "DefaultAddonService.png")
     carpeta("Actualizar Palantix  " + color("(versión %s)" % ADDON.getAddonInfo("version"), GRIS),
@@ -851,6 +856,19 @@ def fav_cambiar(poner):
     guardar_favoritas(favs)
     aviso("Añadida a Favoritas" if poner else "Quitada de Favoritas")
     xbmc.executebuiltin("Container.Refresh")
+
+
+def catalogo_cine_libre():
+    items = cine_libre.peliculas()
+    grupo = PARAMS.get("g")
+    if not grupo:
+        for nombre in dict.fromkeys(it["grupo"] for it in items):
+            carpeta(nombre, url(accion="cine_libre", g=nombre), "DefaultMovies.png")
+        return fin_listado()
+    fichas = [ficha_lista(it) for it in items if it["grupo"] == grupo]
+    xbmcplugin.setContent(HANDLE, "movies")
+    xbmcplugin.addDirectoryItems(HANDLE, fichas, len(fichas))
+    fin_listado("movies")
 
 
 def mis_listas():
@@ -1303,6 +1321,7 @@ SIN_TMDB = {
     "fav_poner": lambda: fav_cambiar(True),
     "fav_quitar": lambda: fav_cambiar(False),
     "listas": mis_listas,
+    "cine_libre": catalogo_cine_libre,
     "anios": lambda: anios(PARAMS["destino"]),
     "dejar_seguir": dejar_seguir,
     "marcar_capitulo": marcar_capitulo,

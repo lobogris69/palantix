@@ -3,11 +3,13 @@ from concurrent.futures import ThreadPoolExecutor
 
 from .archive_org import ArchiveOrg
 from .base import Fuente, Peli, Proveedor  # noqa: F401  (reexportados)
+from .cine_libre import CineLibre
 from .lista_url import ListaURL  # noqa: F401
 
 # Proveedores fijos. Los que dependen de ajustes (Mis listas) se pasan en `extra`.
 PROVEEDORES = [
     ArchiveOrg(),
+    CineLibre(),
 ]
 
 
