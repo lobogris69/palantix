@@ -48,8 +48,8 @@ A partir de ahí las versiones nuevas llegan solas.
 - Aviso cuando a una cuenta le quedan 7 días o menos.
 
 **Trakt** (Ajustes > Trakt)
-- Crea tu aplicación gratis en trakt.tv/oauth/applications (nombre «Palantix», redirect `urn:ietf:wg:oauth:2.0:oob`),
-  pega Client ID y Client Secret y vincula con el código en pantalla.
+- Registra una aplicación **Development** en [Trakt Developer](https://developer.trakt.tv/apps) y añade a tus usuarios de prueba.
+  Introduce el **Client ID** en Ajustes → Trakt y vincula cada cuenta con el código en pantalla.
 - Lo que ves se marca solo en tu Trakt (a partir del 80 %).
 - Menú Trakt: películas y series pendientes y tus listas personales (también directamente en el menú principal).
 - Al terminar te pregunta qué te ha parecido (nunca / a veces / siempre) y guarda la nota en Trakt.

@@ -285,8 +285,8 @@ def vincular():
         AJ.set(s.id + "_activo", "true")
         return xbmcgui.Dialog().ok(s.nombre, "Cuenta vinculada.\n" + texto)
     if PARAMS["s"] == "trakt" and not s.configurado():
-        return xbmcgui.Dialog().ok("Trakt", "Primero crea tu aplicación en trakt.tv/oauth/applications\n"
-                                   "(redirect: urn:ietf:wg:oauth:2.0:oob) y pega aquí Client ID y Client Secret.")
+        return xbmcgui.Dialog().ok("Trakt", "En developer.trakt.tv/apps, crea una app Development o usa la de Palantix\n"
+                                   "y pon su Client ID en Ajustes → Trakt.")
     try:
         pin = s.iniciar_pin()
     except Exception as e:

@@ -1,9 +1,7 @@
 """Trakt.tv: vinculación con código en pantalla, «visto» automático (scrobble), valoraciones,
 lista de pendientes (watchlist) y listas personales.
 
-Trakt exige que cada usuario use SU aplicación: en trakt.tv/oauth/applications > New application,
-nombre «Palantix», redirect uri «urn:ietf:wg:oauth:2.0:oob». Se copian Client ID y Client Secret a Ajustes.
-Solo librería estándar (los ganchos importan xbmc dentro, al usarse en el servicio).
+Usa el Client ID de la aplicación para vincular una cuenta con código de dispositivo.
 """
 import json
 import random
@@ -31,7 +29,7 @@ class Trakt:
 
     # ------------------------------------------------------------ estado
     def configurado(self):
-        return bool(self.aj.get("trakt_client_id") and self.aj.get("trakt_client_secret"))
+        return bool(self.aj.get("trakt_client_id"))
 
     def vinculado(self):
         return bool(self.aj.get("trakt_token"))
@@ -42,7 +40,7 @@ class Trakt:
     # ------------------------------------------------------------ transporte
     def _pedir(self, metodo, ruta, cuerpo=None, auth=True, reintento=True):
         if not self.configurado():
-            raise TraktError("Falta el Client ID y el Client Secret de tu aplicación de Trakt (Ajustes > Trakt)")
+            raise TraktError("Falta el Client ID de la aplicación de Trakt (Ajustes > Trakt)")
         if auth and self.aj.get("trakt_refresh") and float(self.aj.get("trakt_caduca") or 0) < time.time() + 3600:
             self._renovar()
         cab = {"Content-Type": "application/json", "trakt-api-version": "2",
@@ -76,10 +74,17 @@ class Trakt:
         self.aj.set("trakt_refresh", r.get("refresh_token", ""))
         self.aj.set("trakt_caduca", str(int(r.get("created_at", time.time())) + int(r.get("expires_in", 7776000))))
 
+    def _credenciales_oauth(self):
+        datos = {"client_id": self.aj.get("trakt_client_id")}
+        secreto = self.aj.get("trakt_client_secret")
+        if secreto:
+            datos["client_secret"] = secreto
+        return datos
+
     def _renovar(self):
         cod, r = self._pedir("POST", "/oauth/token", {
-            "refresh_token": self.aj.get("trakt_refresh"), "client_id": self.aj.get("trakt_client_id"),
-            "client_secret": self.aj.get("trakt_client_secret"), "redirect_uri": REDIRECT,
+            **self._credenciales_oauth(), "refresh_token": self.aj.get("trakt_refresh"),
+            "redirect_uri": REDIRECT,
             "grant_type": "refresh_token"}, auth=False)
         if cod >= 400 or "access_token" not in r:
             raise TraktError("La sesión de Trakt ha caducado: vuelve a vincular")
@@ -95,8 +100,7 @@ class Trakt:
 
     def comprobar_pin(self, datos):
         cod, r = self._pedir("POST", "/oauth/device/token", {
-            "code": datos["device_code"], "client_id": self.aj.get("trakt_client_id"),
-            "client_secret": self.aj.get("trakt_client_secret")}, auth=False)
+            **self._credenciales_oauth(), "code": datos["device_code"]}, auth=False)
         if cod == 200 and "access_token" in r:
             self._guardar_token(r)
             self.aj.set("trakt_activo", "true")
