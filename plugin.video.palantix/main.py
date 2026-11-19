@@ -1055,7 +1055,8 @@ def reproducir():
             aviso("%s %s" % (etiquetas.texto_etiquetas(a), f.proveedor))
         if not f.privada:
             log("Reproduciendo %s" % f.url)
-        avisar_al_servicio(peli)
+        prioridad_audio = pref["prioridad_idiomas"] or (pref["idioma"],)
+        avisar_al_servicio(peli, prioridad_audio)
         li = xbmcgui.ListItem(path=ruta)
         if desde:
             li.setProperty("StartOffset", str(int(desde)))
@@ -1094,12 +1095,13 @@ def poner_subtitulos(peli, analisis, pref):
     return None
 
 
-def avisar_al_servicio(peli):
+def avisar_al_servicio(peli, prioridad_audio=()):
     """Deja en la ventana principal qué va a sonar y cuál es el siguiente capítulo (lo lee service.py)."""
     ventana = xbmcgui.Window(10000)
     meta = {"tipo": peli.tipo, "tmdb": peli.tmdb_id, "s": peli.temporada, "e": peli.episodio,
             "titulo": peli.titulo, "original": peli.titulo_original, "anio": peli.anio,
-            "poster": PARAMS.get("poster", ""), "fanart": PARAMS.get("fondo", "")}
+            "poster": PARAMS.get("poster", ""), "fanart": PARAMS.get("fondo", ""),
+            "prioridad_audio": prioridad_audio}
     ventana.setProperty("palantix.meta", json.dumps(meta))
     ventana.clearProperty("palantix.siguiente")
     if peli.tipo != "episodio" or ADDON.getSetting("siguiente_activo") == "false":

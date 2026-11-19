@@ -58,7 +58,26 @@ class Reproductor(xbmc.Player):
         VENTANA.clearProperty("palantix.siguiente")
         if self.meta:
             log("Reproduciendo %s" % self.meta.get("titulo"))
+            self.elegir_audio(self.meta.get("prioridad_audio", ()))
             self._gancho("al_empezar", self.meta, self)
+
+    def elegir_audio(self, prioridad):
+        if not prioridad or prioridad[0] not in {"LAT", "CAST"}:
+            return
+        from resources.lib.audio import pista_preferida
+
+        try:
+            peticion = {"jsonrpc": "2.0", "id": 1, "method": "Player.GetProperties",
+                        "params": {"playerid": 1, "properties": ["audiostreams", "currentaudiostream"]}}
+            respuesta = json.loads(xbmc.executeJSONRPC(json.dumps(peticion))).get("result", {})
+            if not isinstance(respuesta, dict):
+                return
+            actual = (respuesta.get("currentaudiostream") or {}).get("index")
+            pista = pista_preferida(respuesta.get("audiostreams", []), prioridad, actual)
+            if pista is not None and pista != actual:
+                self.setAudioStream(pista)
+        except (RuntimeError, ValueError, TypeError, KeyError):
+            log("Kodi no pudo aplicar el idioma de audio preferido")
 
     def onPlayBackStopped(self):
         self._fin(terminado=False)
