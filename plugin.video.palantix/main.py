@@ -11,11 +11,10 @@ import xbmcgui
 import xbmcplugin
 import xbmcvfs
 
-from resources.lib import disponibilidad, etiquetas, listas
+from resources.lib import disponibilidad, etiquetas, fuentes_catalogo, listas
 from resources.lib import actualizar, debrid, inicio, mislistas, novedades, progreso, seguimiento, subtitulos, trakt
 from resources.lib import tmdb as tmdb_mod
-from resources.lib.providers import ListaURL, Peli, buscar_fuentes
-from resources.lib.providers.stremio import Stremio
+from resources.lib.providers import Peli
 
 ADDON = xbmcaddon.Addon()
 BASE = sys.argv[0]
@@ -671,7 +670,7 @@ def _fichas_tmdb(t, elementos):
     with ThreadPoolExecutor(max_workers=8) as pool:
         fichas = [f for f in pool.map(una, elementos[:60]) if f]
     visibles = {str(m["id"]) for m in peliculas_disponibles(
-        [datos for tipo, datos in fichas if tipo == "pelicula"], t)}
+        [datos for tipo, datos in fichas if tipo == "pelicula"])}
     return [ficha_pelicula(datos) if tipo == "pelicula" else ficha_serie(datos)
             for tipo, datos in fichas if tipo != "pelicula" or str(datos["id"]) in visibles]
 
@@ -929,15 +928,8 @@ def trailer():
 
 
 # ---------------------------------------------------------------- reproducción
-IDIOMAS_PRIORIDAD = {
-    "CAST": "Castellano",
-    "LAT": "Latino",
-    "VOSE": "Versión original subtitulada",
-    "VO": "Versión original",
-}
-IDIOMAS_AJUSTE = list(IDIOMAS_PRIORIDAD) + [""]
+IDIOMAS_PRIORIDAD = fuentes_catalogo.IDIOMAS_PRIORIDAD
 ORDENES_FUENTES = ("Idioma primero", "Calidad primero")
-CALIDADES_AJUSTE = ["4K", "1080p", "720p"]
 
 
 def configurar_prioridad_idiomas():
@@ -963,75 +955,25 @@ def configurar_prioridad_idiomas():
 
 
 def preferencias():
-    i = ajuste_int("idioma_pref", 0)
-    c = ajuste_int("calidad_max", 0)
-    prioridad = tuple(dict.fromkeys(
-        codigo for codigo in ADDON.getSetting("prioridad_idiomas").split(",")
-        if codigo in IDIOMAS_PRIORIDAD
-    ))
-    idioma = prioridad[0] if prioridad else (IDIOMAS_AJUSTE[i] if 0 <= i < len(IDIOMAS_AJUSTE) else "")
-    return {
-        "idioma": idioma,
-        "prioridad_idiomas": prioridad,
-        "calidad_primero": ajuste_int("orden_fuentes", 0) == 1,
-        "calidad_max": CALIDADES_AJUSTE[c] if 0 <= c < len(CALIDADES_AJUSTE) else "4K",
-        "solo_idioma": ADDON.getSetting("solo_idioma") == "true",
-    }
+    return fuentes_catalogo.preferencias(ADDON.getSetting)
 
 
 def consulta_fuentes(t):
-    listas_activas = ADDON.getSetting("prov_listas") != "false"
-    archivo_activo = ADDON.getSetting("prov_archive_org") != "false"
-    listas_url = origenes_listas() if listas_activas else []
-    manifiestos = []
-    if ADDON.getSetting("prov_stremio") == "true":
-        for n in range(1, 4):
-            origen = ADDON.getSetting("stremio_%d" % n).strip()
-            if origen:
-                manifiestos.append((n, origen))
-    extra = [ListaURL(listas_url, CACHE, ttl_listas(), log)] if any(listas_url) else []
-    extra += [Stremio(origen, n, log) for n, origen in manifiestos]
-
-    def buscar(peli):
-        if manifiestos and not peli.imdb_id and t and peli.tmdb_id:
-            try:
-                peli.imdb_id = t.imdb_id(peli.tmdb_id, "tv" if peli.tipo == "episodio" else "movie")
-            except Exception:
-                log("No se pudo obtener el identificador IMDb")
-        return buscar_fuentes(peli, activo=lambda _: archivo_activo, log=log, extra=extra)
-
-    return buscar, (archivo_activo, listas_url, manifiestos)
+    origenes = origenes_listas() if ADDON.getSetting("prov_listas") != "false" else []
+    return fuentes_catalogo.consulta(t, ADDON.getSetting, origenes, CACHE, log)
 
 
-def peliculas_disponibles(peliculas, t=None):
+def peliculas_disponibles(peliculas):
     if not peliculas or ADDON.getSetting("solo_peliculas_con_fuentes") != "true":
         return peliculas
 
-    buscar, proveedores = consulta_fuentes(t or api(obligatoria=False))
-    pref = preferencias()
-    barra = None
-
-    def consultar(m):
-        anio = str(m.get("release_date") or "")[:4]
-        peli = Peli(titulo=m.get("title") or "", titulo_original=m.get("original_title") or "",
-                    anio=int(anio) if anio.isdigit() else 0, tmdb_id=m["id"], imdb_id=m.get("imdb_id") or "")
-        return bool(etiquetas.ordenar(buscar(peli), **pref))
-
-    def avance(hechos, total):
-        nonlocal barra
-        if barra is None:
-            barra = xbmcgui.DialogProgress()
-            barra.create("Palantix", "Comprobando fuentes de películas…")
-        barra.update(100 * hechos // total, "Comprobando fuentes de películas…")
-        return not barra.iscanceled()
-
-    try:
-        visibles = disponibilidad.filtrar(peliculas, consultar, CACHE, (proveedores, pref), avance)
-    finally:
-        if barra is not None:
-            barra.close()
+    _, proveedores = consulta_fuentes(None)
+    visibles, pendientes = disponibilidad.filtrar(peliculas, CACHE, (proveedores, preferencias()))
     if not visibles:
-        aviso("No se encontraron fuentes para las películas de esta página")
+        if pendientes:
+            aviso("Comprobando fuentes en segundo plano. Vuelve a abrir esta lista en un momento.")
+        else:
+            aviso("No se encontraron fuentes para las películas de esta página")
     return visibles
 
 
@@ -1274,7 +1216,7 @@ def abrir_inicio():
         tk = False
     try:
         inicio.abrir(ADDON, PERFIL, t, url, favoritas=leer_favoritas(), con_trakt=tk, log=log,
-                     filtrar_peliculas=lambda pelis: peliculas_disponibles(pelis, t))
+                     filtrar_peliculas=peliculas_disponibles)
     except Exception as e:  # si la pantalla nueva fallase en alguna tele, que no te quedes sin Palantix
         log("Inicio falló, abro el menú clásico: %s" % e)
         xbmc.executebuiltin("Container.Update(%s)" % url(accion="clasico"))
