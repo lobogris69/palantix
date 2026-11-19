@@ -15,6 +15,7 @@ from resources.lib import etiquetas, listas
 from resources.lib import actualizar, debrid, inicio, mislistas, novedades, progreso, seguimiento, subtitulos, trakt
 from resources.lib import tmdb as tmdb_mod
 from resources.lib.providers import ListaURL, Peli, buscar_fuentes
+from resources.lib.providers.stremio import Stremio
 
 ADDON = xbmcaddon.Addon()
 BASE = sys.argv[0]
@@ -234,23 +235,29 @@ def _elegir_fichero(videos):
     return xbmcgui.Dialog().select("Elige fichero", ["%s (%.1f GB)" % (v[0], v[1] / 1e9) for v in videos])
 
 
-def resolver(enlace, avisar=True):
+def resolver(enlace, avisar=True, elegir=_elegir_fichero, privada=False):
     """Devuelve la URL final reproducible, o None si no se pudo (avisa si `avisar`)."""
-    servicios = debrid.activos(AJ, **_kw())
+    opciones = _kw()
+    if privada:
+        opciones["log"] = lambda _: None
+    servicios = debrid.activos(AJ, **opciones)
     progreso = None
     try:
         if servicios and (enlace.startswith("magnet:") or any(s.admite(enlace) for s in servicios)):
             progreso = xbmcgui.DialogProgress()
             progreso.create("Palantix", "Pidiendo el enlace al servicio Debrid...")
-        return debrid.resolver(enlace, servicios, elegir=_elegir_fichero,
-                               cancelado=progreso.iscanceled if progreso else (lambda: False), log=log)
+        return debrid.resolver(enlace, servicios, elegir=elegir,
+                               cancelado=progreso.iscanceled if progreso else (lambda: False),
+                               log=opciones["log"])
     except (debrid.DebridError, debrid.NoListo) as e:
-        log("Debrid: %s" % e)
+        if not privada:
+            log("Debrid: %s" % e)
         if avisar:
-            aviso(str(e))
+            aviso("No se pudo resolver la fuente de Stremio" if privada else str(e))
         return None
     except Exception as e:
-        log("Debrid fallo inesperado: %s" % e)
+        if not privada:
+            log("Debrid fallo inesperado: %s" % e)
         if avisar:
             aviso("El servicio Debrid no responde")
         return None
@@ -913,15 +920,51 @@ def trailer():
 
 
 # ---------------------------------------------------------------- reproducción
-IDIOMAS_AJUSTE = ["CAST", "LAT", "VOSE", "VO", ""]
+IDIOMAS_PRIORIDAD = {
+    "CAST": "Castellano",
+    "LAT": "Latino",
+    "VOSE": "Versión original subtitulada",
+    "VO": "Versión original",
+}
+IDIOMAS_AJUSTE = list(IDIOMAS_PRIORIDAD) + [""]
+ORDENES_FUENTES = ("Idioma primero", "Calidad primero")
 CALIDADES_AJUSTE = ["4K", "1080p", "720p"]
+
+
+def configurar_prioridad_idiomas():
+    dialogo = xbmcgui.Dialog()
+    accion = dialogo.select("Prioridad de idiomas", ["Elegir orden", "Usar idioma preferido"])
+    if accion == 1:
+        ADDON.setSetting("prioridad_idiomas", "")
+        return
+    if accion != 0:
+        return
+
+    pendientes = list(IDIOMAS_PRIORIDAD)
+    prioridad = []
+    while len(pendientes) > 1:
+        opciones = [IDIOMAS_PRIORIDAD[codigo] for codigo in pendientes]
+        n = dialogo.select("Idioma en el puesto %d" % (len(prioridad) + 1), opciones)
+        if n < 0:
+            return
+        prioridad.append(pendientes.pop(n))
+    prioridad.extend(pendientes)
+    ADDON.setSetting("prioridad_idiomas", ",".join(prioridad))
+    aviso(" → ".join(IDIOMAS_PRIORIDAD[codigo] for codigo in prioridad))
 
 
 def preferencias():
     i = ajuste_int("idioma_pref", 0)
     c = ajuste_int("calidad_max", 0)
+    prioridad = tuple(dict.fromkeys(
+        codigo for codigo in ADDON.getSetting("prioridad_idiomas").split(",")
+        if codigo in IDIOMAS_PRIORIDAD
+    ))
+    idioma = prioridad[0] if prioridad else (IDIOMAS_AJUSTE[i] if 0 <= i < len(IDIOMAS_AJUSTE) else "")
     return {
-        "idioma": IDIOMAS_AJUSTE[i] if 0 <= i < len(IDIOMAS_AJUSTE) else "",
+        "idioma": idioma,
+        "prioridad_idiomas": prioridad,
+        "calidad_primero": ajuste_int("orden_fuentes", 0) == 1,
         "calidad_max": CALIDADES_AJUSTE[c] if 0 <= c < len(CALIDADES_AJUSTE) else "4K",
         "solo_idioma": ADDON.getSetting("solo_idioma") == "true",
     }
@@ -956,6 +999,21 @@ def reproducir():
     extra = []
     if activo("listas") and any(origenes_listas()):
         extra.append(ListaURL(origenes_listas(), CACHE, ttl_listas(), log))
+    if ADDON.getSetting("prov_stremio") == "true":
+        complementos = []
+        for n in range(1, 4):
+            origen = ADDON.getSetting("stremio_%d" % n).strip()
+            if origen:
+                complementos.append(Stremio(origen, n, log))
+        if complementos:
+            try:
+                t = api(obligatoria=False)
+                if t:
+                    peli.imdb_id = t.imdb_id(peli.tmdb_id, "tv" if episodio else "movie")
+            except Exception:
+                log("[Palantix] No se pudo obtener el identificador IMDb")
+            if peli.imdb_id:
+                extra.extend(complementos)
     fuentes = buscar_fuentes(peli, activo=activo, log=log, extra=extra)
     barra.close()
 
@@ -971,22 +1029,32 @@ def reproducir():
     else:
         textos = ["%s  %s · %s" % (marcas_visibles(a) or etiquetas.texto_etiquetas(a), f.proveedor, f.etiqueta)
                   for f, a in ordenadas]
-        n = xbmcgui.Dialog().select("Elige fuente (la mejor arriba)", textos)
+        n = xbmcgui.Dialog().select("Elige fuente · " + ORDENES_FUENTES[pref["calidad_primero"]], textos)
         if n < 0:
             return no_reproducir()
         candidatas = [ordenadas[n]]
 
     for i, (f, a) in enumerate(candidatas):
         ultima = i == len(candidatas) - 1
-        ruta = resolver(f.url, avisar=ultima)
+        def elegir(videos):
+            if f.archivo:
+                coincidencias = [n for n, v in enumerate(videos)
+                                 if v[0].replace("\\", "/").rsplit("/", 1)[-1] == f.archivo]
+                if len(coincidencias) == 1:
+                    return coincidencias[0]
+            return _elegir_fichero(videos)
+
+        ruta = resolver(f.url, avisar=ultima, elegir=elegir, privada=f.privada)
         if not ruta:
-            log("Fuente descartada: %s" % f.etiqueta)
+            if not f.privada:
+                log("Fuente descartada: %s" % f.etiqueta)
             continue
         if f.cabeceras:  # convención de Kodi para mandar cabeceras HTTP
             ruta += "|" + urlencode(f.cabeceras)
         if automatico and len(candidatas) > 1:
             aviso("%s %s" % (etiquetas.texto_etiquetas(a), f.proveedor))
-        log("Reproduciendo %s" % f.url)
+        if not f.privada:
+            log("Reproduciendo %s" % f.url)
         avisar_al_servicio(peli)
         li = xbmcgui.ListItem(path=ruta)
         if desde:
@@ -1071,6 +1139,7 @@ SIN_TMDB = {
     "quitar_medias": quitar_medias,
     "trailer": trailer,
     "ajustes": ADDON.openSettings,
+    "orden_idiomas": configurar_prioridad_idiomas,
     "tmdb_clave": comprobar_tmdb,
     "actualizar": lambda: buscar_actualizacion(),
     "lista_nueva": lambda: lista_nueva(),

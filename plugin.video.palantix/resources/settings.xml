@@ -19,7 +19,10 @@
         <setting id="color_etiquetas" type="enum" label="Color de las etiquetas" values="Sin color|Dorado|Azul|Verde|Naranja|Violeta|Blanco" default="1"/>
     </category>
     <category label="Reproducción">
-        <setting id="idioma_pref" type="enum" label="Idioma preferido" values="Castellano|Latino|VOSE|Versión original|Me da igual" default="0"/>
+        <setting id="idioma_pref" type="enum" label="Idioma preferido (cuando no hay un orden personalizado)" values="Castellano|Latino|VOSE|Versión original|Me da igual" default="0"/>
+        <setting id="orden_fuentes" type="enum" label="Orden de fuentes" values="Idioma primero|Calidad primero" default="0"/>
+        <setting type="action" label="Ordenar prioridad de idiomas" action="RunPlugin(plugin://plugin.video.palantix/?accion=orden_idiomas)"/>
+        <setting id="prioridad_idiomas" type="text" label="" default="" visible="false"/>
         <setting id="solo_idioma" type="bool" label="Ocultar fuentes en otros idiomas" default="false"/>
         <setting id="calidad_max" type="enum" label="Calidad máxima (baja si tu conexión es lenta)" values="4K|1080p|720p" default="0"/>
         <setting id="autoplay" type="bool" label="Reproducción automática (elige la mejor fuente sin preguntar)" default="false"/>
@@ -88,6 +91,11 @@
         <setting id="trakt_caduca" type="text" label="" default="" visible="false"/>
     </category>
     <category label="Fuentes">
+        <setting id="prov_stremio" type="bool" label="Buscar fuentes en complementos de Stremio" default="false"/>
+        <setting type="lsep" label="Usa estos complementos solo para contenido que tengas autorización para reproducir"/>
+        <setting id="stremio_1" type="text" label="URL HTTPS del manifiesto (1)" default="" option="hidden"/>
+        <setting id="stremio_2" type="text" label="URL HTTPS del manifiesto (2)" default="" option="hidden"/>
+        <setting id="stremio_3" type="text" label="URL HTTPS del manifiesto (3)" default="" option="hidden"/>
         <setting id="prov_archive_org" type="bool" label="Internet Archive (dominio público)" default="true"/>
         <setting id="prov_listas" type="bool" label="Buscar también en Mis listas" default="true"/>
     </category>

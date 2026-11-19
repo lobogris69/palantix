@@ -116,6 +116,9 @@ class TMDB:
     def detalle(self, tmdb_id):
         return self._get("/movie/%s" % tmdb_id)
 
+    def imdb_id(self, tmdb_id, tipo="movie"):
+        return self._get("/%s/%s/external_ids" % (tipo, tmdb_id)).get("imdb_id") or ""
+
     # --- Series ---------------------------------------------------------
     def s_tendencias(self, page=1):
         return self._get("/trending/tv/week", page=page)

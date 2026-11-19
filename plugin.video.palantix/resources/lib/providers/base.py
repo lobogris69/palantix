@@ -32,6 +32,9 @@ class Fuente:
     idioma: str = ""            # si la fuente lo sabe seguro: "CAST", "LAT", "VOSE"...
     cabeceras: dict = field(default_factory=dict)  # se añaden a la URL con |Cabecera=valor
 
+    archivo: str = ""            # nombre sugerido para magnets con varios vídeos
+    privada: bool = False        # evita registrar enlaces firmados o credenciales
+
 
 class Proveedor:
     id = "base"
