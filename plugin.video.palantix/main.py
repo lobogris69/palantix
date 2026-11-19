@@ -11,7 +11,7 @@ import xbmcgui
 import xbmcplugin
 import xbmcvfs
 
-from resources.lib import etiquetas, listas
+from resources.lib import disponibilidad, etiquetas, listas
 from resources.lib import actualizar, debrid, inicio, mislistas, novedades, progreso, seguimiento, subtitulos, trakt
 from resources.lib import tmdb as tmdb_mod
 from resources.lib.providers import ListaURL, Peli, buscar_fuentes
@@ -432,7 +432,10 @@ def ficha_lista(it):
 
 def listar(datos, accion, ficha=ficha_pelicula, contenido="movies", **extra):
     xbmcplugin.setContent(HANDLE, contenido)
-    items = [ficha(m) for m in datos.get("results", [])]
+    resultados = datos.get("results", [])
+    if contenido == "movies":
+        resultados = peliculas_disponibles(resultados)
+    items = [ficha(m) for m in resultados]
     xbmcplugin.addDirectoryItems(HANDLE, items, len(items))
     pagina, total = int(datos.get("page", 1)), int(datos.get("total_pages", 1))
     if pagina < min(total, 500):  # TMDB no sirve más allá de la página 500
@@ -623,6 +626,9 @@ def a_medias():
     """Películas sin terminar, con su barra de progreso."""
     xbmcplugin.setContent(HANDLE, "movies")
     pelis = progreso.peliculas(PERFIL)
+    candidatos = [dict(d, id=d["tmdb"], title=d["titulo"], original_title=d.get("original"),
+                       release_date=str(d.get("anio") or "")) for d in pelis]
+    pelis = peliculas_disponibles(candidatos)
     for d in pelis:
         etiqueta = "%s (%s)" % (d["titulo"], d["anio"]) if d.get("anio") else d["titulo"]
         li = xbmcgui.ListItem("%s  %s" % (etiqueta, color("%s de %s" % (progreso.hhmmss(d["pos"]), progreso.hhmmss(d["total"])), AZUL)))
@@ -639,7 +645,7 @@ def a_medias():
                                                 original=d.get("original", ""), anio=d.get("anio", ""),
                                                 poster=d.get("poster", ""), fondo=d.get("fanart", "")), li, False)
     if not pelis:
-        aviso("No tienes películas a medias")
+        aviso("No hay películas a medias para mostrar")
     fin_listado("movies")
 
 
@@ -655,16 +661,19 @@ def _fichas_tmdb(t, elementos):
     def una(e):
         tipo, tid = e
         try:
-            if tipo == "pelicula":
-                return ficha_pelicula(t.detalle(tid))
-            d = t.serie(tid)
-            d.setdefault("id", tid)
-            return ficha_serie(d)
+            datos = t.detalle(tid) if tipo == "pelicula" else t.serie(tid)
+            datos.setdefault("id", tid)
+            return tipo, datos
         except Exception as ex:
             log("TMDB %s %s: %s" % (tipo, tid, ex))
             return None
+
     with ThreadPoolExecutor(max_workers=8) as pool:
-        return [f for f in pool.map(una, elementos[:60]) if f]
+        fichas = [f for f in pool.map(una, elementos[:60]) if f]
+    visibles = {str(m["id"]) for m in peliculas_disponibles(
+        [datos for tipo, datos in fichas if tipo == "pelicula"], t)}
+    return [ficha_pelicula(datos) if tipo == "pelicula" else ficha_serie(datos)
+            for tipo, datos in fichas if tipo != "pelicula" or str(datos["id"]) in visibles]
 
 
 def menu_trakt():
@@ -970,6 +979,62 @@ def preferencias():
     }
 
 
+def consulta_fuentes(t):
+    listas_activas = ADDON.getSetting("prov_listas") != "false"
+    archivo_activo = ADDON.getSetting("prov_archive_org") != "false"
+    listas_url = origenes_listas() if listas_activas else []
+    manifiestos = []
+    if ADDON.getSetting("prov_stremio") == "true":
+        for n in range(1, 4):
+            origen = ADDON.getSetting("stremio_%d" % n).strip()
+            if origen:
+                manifiestos.append((n, origen))
+    extra = [ListaURL(listas_url, CACHE, ttl_listas(), log)] if any(listas_url) else []
+    extra += [Stremio(origen, n, log) for n, origen in manifiestos]
+
+    def buscar(peli):
+        if manifiestos and not peli.imdb_id and t and peli.tmdb_id:
+            try:
+                peli.imdb_id = t.imdb_id(peli.tmdb_id, "tv" if peli.tipo == "episodio" else "movie")
+            except Exception:
+                log("No se pudo obtener el identificador IMDb")
+        return buscar_fuentes(peli, activo=lambda _: archivo_activo, log=log, extra=extra)
+
+    return buscar, (archivo_activo, listas_url, manifiestos)
+
+
+def peliculas_disponibles(peliculas, t=None):
+    if not peliculas or ADDON.getSetting("solo_peliculas_con_fuentes") != "true":
+        return peliculas
+
+    buscar, proveedores = consulta_fuentes(t or api(obligatoria=False))
+    pref = preferencias()
+    barra = None
+
+    def consultar(m):
+        anio = str(m.get("release_date") or "")[:4]
+        peli = Peli(titulo=m.get("title") or "", titulo_original=m.get("original_title") or "",
+                    anio=int(anio) if anio.isdigit() else 0, tmdb_id=m["id"], imdb_id=m.get("imdb_id") or "")
+        return bool(etiquetas.ordenar(buscar(peli), **pref))
+
+    def avance(hechos, total):
+        nonlocal barra
+        if barra is None:
+            barra = xbmcgui.DialogProgress()
+            barra.create("Palantix", "Comprobando fuentes de películas…")
+        barra.update(100 * hechos // total, "Comprobando fuentes de películas…")
+        return not barra.iscanceled()
+
+    try:
+        visibles = disponibilidad.filtrar(peliculas, consultar, CACHE, (proveedores, pref), avance)
+    finally:
+        if barra is not None:
+            barra.close()
+    if not visibles:
+        aviso("No se encontraron fuentes para las películas de esta página")
+    return visibles
+
+
 def no_reproducir():
     xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
 
@@ -995,27 +1060,11 @@ def reproducir():
         desde = previo["pos"] if n == 0 else 0
     barra = xbmcgui.DialogProgress()
     barra.create("Palantix", "Buscando fuentes para «%s»..." % nombre)
-    activo = lambda pid: ADDON.getSetting("prov_" + pid) != "false"
-    extra = []
-    if activo("listas") and any(origenes_listas()):
-        extra.append(ListaURL(origenes_listas(), CACHE, ttl_listas(), log))
-    if ADDON.getSetting("prov_stremio") == "true":
-        complementos = []
-        for n in range(1, 4):
-            origen = ADDON.getSetting("stremio_%d" % n).strip()
-            if origen:
-                complementos.append(Stremio(origen, n, log))
-        if complementos:
-            try:
-                t = api(obligatoria=False)
-                if t:
-                    peli.imdb_id = t.imdb_id(peli.tmdb_id, "tv" if episodio else "movie")
-            except Exception:
-                log("[Palantix] No se pudo obtener el identificador IMDb")
-            if peli.imdb_id:
-                extra.extend(complementos)
-    fuentes = buscar_fuentes(peli, activo=activo, log=log, extra=extra)
-    barra.close()
+    try:
+        buscar, _ = consulta_fuentes(api(obligatoria=False))
+        fuentes = buscar(peli)
+    finally:
+        barra.close()
 
     pref = preferencias()
     ordenadas = etiquetas.ordenar(fuentes, **pref)
@@ -1224,7 +1273,8 @@ def abrir_inicio():
     except Exception:
         tk = False
     try:
-        inicio.abrir(ADDON, PERFIL, t, url, favoritas=leer_favoritas(), con_trakt=tk, log=log)
+        inicio.abrir(ADDON, PERFIL, t, url, favoritas=leer_favoritas(), con_trakt=tk, log=log,
+                     filtrar_peliculas=lambda pelis: peliculas_disponibles(pelis, t))
     except Exception as e:  # si la pantalla nueva fallase en alguna tele, que no te quedes sin Palantix
         log("Inicio falló, abro el menú clásico: %s" % e)
         xbmc.executebuiltin("Container.Update(%s)" % url(accion="clasico"))

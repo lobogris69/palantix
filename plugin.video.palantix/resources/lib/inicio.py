@@ -109,7 +109,7 @@ def _pedir(t, que):
     return t.s_por_genero(arg, 1)
 
 
-def datos_pestana(perfil, t, url, pestana):
+def datos_pestana(perfil, t, url, pestana, filtrar_peliculas=lambda pelis: pelis):
     """{fila: elementos} de la pestaña Películas o Series (en paralelo y guardado 1 hora)."""
     filas = PESTANAS[pestana]
     ruta = os.path.join(perfil, "inicio_%s.json" % pestana)
@@ -134,6 +134,9 @@ def datos_pestana(perfil, t, url, pestana):
             os.makedirs(perfil, exist_ok=True)
             with open(ruta, "w", encoding="utf-8") as f:
                 json.dump({"fecha": time.time(), "idioma": t.idioma, "datos": crudo}, f)
+    if pestana == "peliculas":
+        visibles = {str(m["id"]) for m in filtrar_peliculas([m for fila in crudo.values() for m in fila])}
+        crudo = {fid: [m for m in fila if str(m["id"]) in visibles] for fid, fila in crudo.items()}
     hacer = elemento_pelicula if pestana == "peliculas" else elemento_serie
     return {fid: [hacer(x, url) for x in crudo.get(fid, [])] for fid, _, _ in filas}
 
@@ -144,13 +147,20 @@ def titulos(pestana):
     return {fid: titulo for fid, titulo, _ in PESTANAS[pestana]}
 
 
-def datos_filas(perfil, t, url, favoritas=()):
+def datos_filas(perfil, t, url, favoritas=(), filtrar_peliculas=lambda pelis: pelis):
     """{id_fila: [elementos]} listos para pintar."""
     filas = {fid: [] for fid, _ in FILAS}
     nov = novedades.leer(perfil)
 
     # 101 Continuar viendo: películas a medias + siguiente capítulo de las series empezadas
-    for d in progreso.peliculas(perfil)[:10]:
+    a_medias = progreso.peliculas(perfil)[:10]
+    tm = _tmdb_cache(perfil, t) if t else {}
+    pelis = [m for grupo in ("tendencias", "cines", "valoradas") for m in tm.get(grupo, [])]
+    pelis.extend(favoritas)
+    pelis.extend(dict(id=d["tmdb"], title=d["titulo"], original_title=d.get("original"),
+                      release_date=str(d.get("anio") or "")) for d in a_medias)
+    visibles = {str(m["id"]) for m in filtrar_peliculas(pelis)}
+    for d in (d for d in a_medias if str(d["tmdb"]) in visibles):
         quedan = int((d["total"] - d["pos"]) // 60)
         filas[101].append({
             "label": d["titulo"], "label2": "%s · quedan %d min" % (d["titulo"], quedan),
@@ -179,14 +189,13 @@ def datos_filas(perfil, t, url, favoritas=()):
 
     # 103-106 catálogo de TMDB
     if t:
-        tm = _tmdb_cache(perfil, t)
-        filas[103] = [elemento_pelicula(m, url) for m in tm.get("tendencias", [])]
+        filas[103] = [elemento_pelicula(m, url) for m in tm.get("tendencias", []) if str(m["id"]) in visibles]
         filas[104] = [elemento_serie(s, url) for s in tm.get("series", [])]
-        filas[105] = [elemento_pelicula(m, url) for m in tm.get("cines", [])]
-        filas[106] = [elemento_pelicula(m, url) for m in tm.get("valoradas", [])]
+        filas[105] = [elemento_pelicula(m, url) for m in tm.get("cines", []) if str(m["id"]) in visibles]
+        filas[106] = [elemento_pelicula(m, url) for m in tm.get("valoradas", []) if str(m["id"]) in visibles]
 
     # 107 Mi lista (favoritas)
-    filas[107] = [elemento_pelicula(m, url) for m in favoritas]
+    filas[107] = [elemento_pelicula(m, url) for m in favoritas if str(m["id"]) in visibles]
     return filas
 
 
@@ -207,7 +216,8 @@ def menu(url, con_trakt=False):
     return m
 
 
-def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print):
+def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
+          filtrar_peliculas=lambda pelis: pelis):
     import xbmc
     import xbmcgui
 
@@ -254,9 +264,9 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print):
             self.setProperty("estado", "Cargando...")
             try:
                 if pestana == "inicio":
-                    filas = datos_filas(perfil, t, url, favoritas)
+                    filas = datos_filas(perfil, t, url, favoritas, filtrar_peliculas)
                 elif t:
-                    filas = datos_pestana(perfil, t, url, pestana)
+                    filas = datos_pestana(perfil, t, url, pestana, filtrar_peliculas)
                 else:
                     filas = {}
             except Exception as e:
@@ -273,7 +283,8 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print):
             if primera:
                 self.setFocusId(primera)
             else:
-                self.setProperty("estado", "Pon tu clave de TMDB en Ajustes para ver el catálogo")
+                self.setProperty("estado", "No hay títulos para mostrar" if t else
+                                 "Pon tu clave de TMDB en Ajustes para ver el catálogo")
                 self.setFocusId(200)
 
         def onAction(self, accion):

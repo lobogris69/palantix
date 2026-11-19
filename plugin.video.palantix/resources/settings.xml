@@ -11,6 +11,7 @@
         <setting id="preguntado_idioma" type="text" label="" default="" visible="false"/>
     </category>
     <category label="Catálogo">
+        <setting id="solo_peliculas_con_fuentes" type="bool" label="Mostrar solo películas con fuentes" default="false"/>
         <setting id="inicio_plataforma" type="bool" label="Pantalla de inicio con carteles y filas de carátulas" default="true"/>
         <setting id="vista_listados" type="enum" label="Vista de películas y series" values="Carátulas grandes|Mosaico|Mosaico con información|Lista" default="0"/>
         <setting id="orden_listas" type="enum" label="Orden de géneros y años" values="Más populares|Más recientes|Mejor valoradas|Alfabético" default="0"/>
