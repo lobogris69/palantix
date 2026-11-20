@@ -35,6 +35,11 @@ A partir de ahí las versiones nuevas llegan solas.
 - **Siguiente capítulo** automático con cuenta atrás al final (se puede cancelar).
 
 **Deportes**
+- **Guía TV** muestra qué emite cada canal ahora y a continuación con los horarios
+  de [EPG dobleM](https://github.com/davidmuma/EPG_dobleM). Pulsa el canal para verlo en directo.
+  Las horas se muestran en la zona horaria de Kodi y la programación se guarda durante cuatro horas.
+- Si exportas canales a TV desde EKHorus, Palantix añade los que coincidan de
+  forma inequívoca con un nombre de la guía.
 - **Canales en directo** incluye Teledeporte, Esport3, Real Madrid TV y Top Barça.
   La disponibilidad de cada señal depende del canal y de la ubicación.
 - En **Mis fuentes** puedes pegar un enlace Ace Stream, un código de 40 caracteres

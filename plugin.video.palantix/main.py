@@ -12,7 +12,7 @@ import xbmcgui
 import xbmcplugin
 import xbmcvfs
 
-from resources.lib import deportes, disponibilidad, etiquetas, fuentes_catalogo, listas, preferencias_copia
+from resources.lib import deportes, disponibilidad, epg, etiquetas, fuentes_catalogo, listas, preferencias_copia
 from resources.lib import actualizar, debrid, inicio, mislistas, novedades, progreso, seguimiento, subtitulos, trakt
 from resources.lib import tmdb as tmdb_mod
 from resources.lib.providers import Peli
@@ -883,6 +883,7 @@ def entrada_deporte(titulo, enlace, poster=""):
 def menu_deportes():
     carpeta("Hoy", url(accion="deportes_hoy"))
     carpeta("Canales en directo", url(accion="deportes_canales"), "DefaultTVShows.png")
+    carpeta("Guía TV", url(accion="deportes_epg"), "DefaultTVShows.png")
     reproductor = complemento_ace_stream()
     if reproductor and reproductor.getAddonInfo("name").casefold() == "ekhorus":
         carpeta("Canales de EKHorus", deportes.ruta_catalogo_ekhorus(), "DefaultTVShows.png")
@@ -893,6 +894,51 @@ def menu_deportes():
 def canales_deportes():
     for titulo, enlace in deportes.CANALES:
         entrada_deporte(titulo, enlace)
+    return fin_listado()
+
+
+def guia_deportes():
+    hora = time.time()
+    try:
+        datos = epg.cargar(CACHE, hora)
+    except (OSError, EOFError, ValueError, epg.ElementTree.ParseError):
+        aviso("No se pudo descargar la guía dobleM")
+        datos = {"nombres": {}, "programas": {}}
+
+    canales = [(nombre, epg.IDS_PALANTIX.get(nombre, nombre), enlace)
+               for nombre, enlace in deportes.CANALES]
+    reproductor = complemento_ace_stream()
+    if reproductor and reproductor.getAddonInfo("name").casefold() == "ekhorus":
+        ruta = xbmcvfs.translatePath(
+            "special://profile/addon_data/script.module.horus/tv/ekhorus.m3u")
+        try:
+            exportados = listas.parsear(listas.descargar(ruta))
+        except (OSError, ValueError):
+            exportados = []
+        nombres = epg.indice_nombres(datos)
+        vistos = {cid for _, cid, _ in canales}
+        for item in exportados:
+            cid = nombres.get(epg.normalizar(item["titulo"]))
+            enlace = deportes.ruta_canal_ekhorus(item["url"])
+            if cid and cid not in vistos and enlace:
+                canales.append((item["titulo"], cid, enlace))
+                vistos.add(cid)
+
+    for nombre, cid, enlace in canales:
+        actual, siguiente = epg.ahora_y_despues(datos["programas"].get(cid, []), hora)
+        partes = [nombre]
+        for etiqueta, programa in (("Ahora", actual), ("Después", siguiente)):
+            if programa:
+                inicio = datetime.fromtimestamp(programa[0]).strftime("%H:%M")
+                partes.append("%s %s: %s" % (etiqueta, inicio, programa[2]))
+        if not actual and not siguiente:
+            partes.append("Sin programación disponible")
+        if deportes.es_web(enlace):
+            entrada_deporte(" · ".join(partes), enlace)
+        else:
+            li = xbmcgui.ListItem(" · ".join(partes))
+            li.setProperty("IsPlayable", "true")
+            xbmcplugin.addDirectoryItem(HANDLE, enlace, li)
     return fin_listado()
 
 
@@ -1465,6 +1511,7 @@ SIN_TMDB = {
     "cine_libre": catalogo_cine_libre,
     "deportes": menu_deportes,
     "deportes_canales": canales_deportes,
+    "deportes_epg": guia_deportes,
     "deportes_fuentes": fuentes_deportes,
     "deportes_anadir": anadir_fuente_deportes,
     "deportes_quitar": quitar_fuente_deportes,
