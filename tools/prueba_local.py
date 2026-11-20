@@ -212,7 +212,7 @@ try:
     }), encoding="utf-8")
     exportacion = Path(TMP, "ekhorus.m3u")
     enlace = "plugin://script.module.horus/?" + quote(b64encode(
-        repr({"action": "play", "infohash": cid}).encode()))
+        repr({"action": "play", "infohash": cid, "motor": 1}).encode()))
     exportacion.write_text("#EXTM3U\n#EXTINF:-1,Teledeporte HD\n" + enlace + "\n", encoding="utf-8")
     vfs = sys.modules["xbmcvfs"]
     traducir = vfs.translatePath
@@ -221,7 +221,9 @@ try:
         r = abrir("?accion=deportes_epg")
         teledeporte = [(titulo, u) for titulo, u in r["items"] if titulo.startswith("Teledeporte")]
         comprobar("Guía: EKHorus tiene prioridad para Teledeporte", len(teledeporte) == 1 and
-                  "Partido" in teledeporte[0][0] and "infohash=" + cid in teledeporte[0][1])
+                  "Partido" in teledeporte[0][0] and
+                  literal_eval(b64decode(unquote(urlsplit(teledeporte[0][1]).query)).decode()) ==
+                  {"action": "play", "infohash": cid, "origen": "tv", "motor": 1})
         comprobar("Guía: Madrid avisa que falta señal directa",
                   any(t.startswith("Real Madrid TV") and "Sin señal directa" in t and not u for t, u in r["items"]))
         comprobar("Guía: conserva el directo si no está exportado",

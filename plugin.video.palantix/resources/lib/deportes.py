@@ -58,7 +58,11 @@ def ruta_canal_ekhorus(enlace):
         valor = item.get(campo)
         cid = ace_id(valor) if isinstance(valor, str) else ""
         if cid:
-            return "plugin://%s?%s" % (HORUS, urlencode({"action": "play", campo: cid}))
+            # Conserva la ruta interna y el motor elegido al exportar el canal.
+            canal = {"action": "play", campo: cid, "origen": "tv"}
+            if item.get("motor") == 1:
+                canal["motor"] = 1
+            return prefijo + quote(base64.b64encode(repr(canal).encode()).decode(), safe="")
     return ""
 
 
