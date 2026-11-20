@@ -1,7 +1,8 @@
 """Fuentes deportivas y validación de enlaces al motor Ace Stream."""
+import base64
 import re
 from datetime import datetime
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import quote, urlencode, urlsplit
 
 HORUS = "script.module.horus"
 _CID = re.compile(r"(?:acestream://)?([0-9a-f]{40})", re.I)
@@ -32,6 +33,12 @@ def ruta_horus(enlace):
     if not cid:
         return ""
     return "plugin://%s?%s" % (HORUS, urlencode({"action": "play", "id": "acestream://" + cid}))
+
+
+def ruta_catalogo_ekhorus():
+    """EKHorus abre el catálogo clásico como directorio de Kodi."""
+    consulta = base64.b64encode(b"{'action': 'catalogo', 'clasico': 1}")
+    return "plugin://%s/?%s" % (HORUS, quote(consulta))
 
 
 def inicio_evento(valor):
