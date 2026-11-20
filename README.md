@@ -40,7 +40,7 @@ A partir de ahí las versiones nuevas llegan solas.
   Las horas se muestran en la zona horaria de Kodi y la programación se guarda durante cuatro horas.
 - Si exportas canales a TV desde EKHorus, Palantix añade los que coincidan de
   forma inequívoca con un nombre de la guía.
-- **Canales en directo** incluye Teledeporte, Esport3, Real Madrid TV y Top Barça.
+- **Canales en directo** incluye Teledeporte, Esport3 y Top Barça. Real Madrid TV conserva su programación en la guía y se puede abrir si coincide con un canal exportado desde EKHorus.
   La disponibilidad de cada señal depende del canal y de la ubicación.
 - En **Mis fuentes** puedes pegar un enlace Ace Stream, un código de 40 caracteres
   o la URL de una lista M3U o JSON. Las direcciones se guardan en el perfil de Kodi.

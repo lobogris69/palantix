@@ -893,7 +893,8 @@ def menu_deportes():
 
 def canales_deportes():
     for titulo, enlace in deportes.CANALES:
-        entrada_deporte(titulo, enlace)
+        if enlace:
+            entrada_deporte(titulo, enlace)
     return fin_listado()
 
 
@@ -933,7 +934,10 @@ def guia_deportes():
                 partes.append("%s %s: %s" % (etiqueta, inicio, programa[2]))
         if not actual and not siguiente:
             partes.append("Sin programación disponible")
-        if deportes.es_web(enlace):
+        if not enlace:
+            partes.append("Sin señal directa")
+            xbmcplugin.addDirectoryItem(HANDLE, "", xbmcgui.ListItem(" · ".join(partes)))
+        elif deportes.es_web(enlace):
             entrada_deporte(" · ".join(partes), enlace)
         else:
             li = xbmcgui.ListItem(" · ".join(partes))
