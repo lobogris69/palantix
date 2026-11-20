@@ -905,8 +905,8 @@ def guia_deportes():
         aviso("No se pudo descargar la guía dobleM")
         datos = {"nombres": {}, "programas": {}}
 
-    canales = [(nombre, epg.IDS_PALANTIX.get(nombre, nombre), enlace)
-               for nombre, enlace in deportes.CANALES]
+    canales = {epg.IDS_PALANTIX.get(nombre, nombre): (nombre, enlace)
+               for nombre, enlace in deportes.CANALES}
     reproductor = complemento_ace_stream()
     if reproductor and reproductor.getAddonInfo("name").casefold() == "ekhorus":
         ruta = xbmcvfs.translatePath(
@@ -916,15 +916,15 @@ def guia_deportes():
         except (OSError, ValueError):
             exportados = []
         nombres = epg.indice_nombres(datos)
-        vistos = {cid for _, cid, _ in canales}
+        vistos = set()
         for item in exportados:
             cid = nombres.get(epg.normalizar(item["titulo"]))
             enlace = deportes.ruta_canal_ekhorus(item["url"])
             if cid and cid not in vistos and enlace:
-                canales.append((item["titulo"], cid, enlace))
+                canales[cid] = (canales.get(cid, (item["titulo"], enlace))[0], enlace)
                 vistos.add(cid)
 
-    for nombre, cid, enlace in canales:
+    for cid, (nombre, enlace) in canales.items():
         actual, siguiente = epg.ahora_y_despues(datos["programas"].get(cid, []), hora)
         partes = [nombre]
         for etiqueta, programa in (("Ahora", actual), ("Después", siguiente)):

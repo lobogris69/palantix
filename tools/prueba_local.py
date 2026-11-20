@@ -188,7 +188,7 @@ try:
     nombre_ace = "EKHorus"
     r = abrir("?accion=deportes")
     from ast import literal_eval
-    from base64 import b64decode
+    from base64 import b64decode, b64encode
     from urllib.parse import unquote, urlsplit
     ruta = next((u for titulo, u in r["items"] if titulo == "Canales de EKHorus"), "")
     partes = urlsplit(ruta)
@@ -200,6 +200,33 @@ try:
     comprobar("Palantix abre los ajustes de EKHorus", ajustes_ace == ["EKHorus"])
     r = abrir(consulta_ace)
     comprobar("EKHorus recibe el enlace Ace Stream", r["resuelto"][0] and r["resuelto"][1].endswith(cid))
+    from pathlib import Path
+    from time import time
+    from urllib.parse import quote
+    epg_cache = Path(TMP, "cache")
+    epg_cache.mkdir(exist_ok=True)
+    hora = time()
+    Path(epg_cache, "epg-doblem.json").write_text(json.dumps({
+        "nombres": {"Teledeporte": ["Teledeporte HD"]},
+        "programas": {"Teledeporte": [[hora - 60, hora + 60, "Partido"]]},
+    }), encoding="utf-8")
+    exportacion = Path(TMP, "ekhorus.m3u")
+    enlace = "plugin://script.module.horus/?" + quote(b64encode(
+        repr({"action": "play", "infohash": cid}).encode()))
+    exportacion.write_text("#EXTM3U\n#EXTINF:-1,Teledeporte HD\n" + enlace + "\n", encoding="utf-8")
+    vfs = sys.modules["xbmcvfs"]
+    traducir = vfs.translatePath
+    try:
+        vfs.translatePath = lambda ruta: str(exportacion) if ruta.endswith("/ekhorus.m3u") else TMP
+        r = abrir("?accion=deportes_epg")
+        teledeporte = [(titulo, u) for titulo, u in r["items"] if titulo.startswith("Teledeporte")]
+        comprobar("Guía: EKHorus tiene prioridad para Teledeporte", len(teledeporte) == 1 and
+                  "Partido" in teledeporte[0][0] and "infohash=" + cid in teledeporte[0][1])
+        comprobar("Guía: conserva el directo si no está exportado",
+                  any(t.startswith("Esport3") and "deportes_play" in u for t, u in r["items"]))
+    finally:
+        vfs.translatePath = traducir
+
 finally:
     sys.modules["xbmcaddon"].Addon = addon_original
     sys.modules["xbmc"].getCondVisibility = visibilidad_original
