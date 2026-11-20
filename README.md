@@ -39,8 +39,10 @@ A partir de ahí las versiones nuevas llegan solas.
   La disponibilidad de cada señal depende del canal y de la ubicación.
 - En **Mis fuentes** puedes pegar un enlace Ace Stream, un código de 40 caracteres
   o la URL de una lista M3U o JSON. Las direcciones se guardan en el perfil de Kodi.
-- **Configurar Ace Stream** abre los ajustes de Horus desde Palantix si está instalado.
-  La reproducción P2P usa Horus y el motor Ace Stream compatible con tu equipo.
+- **Mis fuentes** abre los ajustes del reproductor habilitado en Kodi (Horus o
+  EKHorus). La reproducción P2P usa ese complemento y el motor Ace Stream del equipo.
+- Con EKHorus habilitado, **Canales de EKHorus** abre los canales del propio
+  complemento. Horus y EKHorus comparten identificador en Kodi.
 - **Hoy** ordena los eventos de tus listas por hora local. En JSON se indica
   `inicio` en formato ISO 8601 (p. ej. `2026-11-19T20:00:00+01:00`) en cada
   entrada del formato mostrado más abajo. En M3U utiliza el atributo

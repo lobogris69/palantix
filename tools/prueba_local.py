@@ -165,12 +165,43 @@ consulta_ace = "?" + urlencode({"accion": "deportes_play", "u": "acestream://" +
 r = abrir(consulta_ace)
 comprobar("Ace Stream sin Horus termina con un fallo controlado", r["resuelto"] == (False, ""))
 visibilidad_original = sys.modules["xbmc"].getCondVisibility
+addon_original = sys.modules["xbmcaddon"].Addon
+nombre_ace = "Horus"
+ajustes_ace = []
+
+
+def addon_simulado(addon_id=None):
+    if addon_id == "script.module.horus":
+        return types.SimpleNamespace(getAddonInfo=lambda clave: nombre_ace,
+                                     openSettings=lambda: ajustes_ace.append(nombre_ace))
+    return addon_original()
+
+
 try:
-    sys.modules["xbmc"].getCondVisibility = lambda c: c == "System.HasAddon(script.module.horus)"
+    sys.modules["xbmc"].getCondVisibility = lambda c: c == "System.AddonIsEnabled(script.module.horus)"
+    sys.modules["xbmcaddon"].Addon = addon_simulado
     r = abrir(consulta_ace)
     comprobar("Ace Stream delega en Horus",
               r["resuelto"] == (True, "plugin://script.module.horus?action=play&id=acestream%3A%2F%2F" + cid))
+    r = abrir("?accion=deportes")
+    comprobar("Horus original sin catálogo EKHorus", not any(i[0] == "Canales de EKHorus" for i in r["items"]))
+    nombre_ace = "EKHorus"
+    r = abrir("?accion=deportes")
+    from ast import literal_eval
+    from base64 import b64decode
+    from urllib.parse import unquote, urlsplit
+    ruta = next((u for titulo, u in r["items"] if titulo == "Canales de EKHorus"), "")
+    partes = urlsplit(ruta)
+    comprobar("EKHorus abre su catálogo clásico", partes.netloc == "script.module.horus" and
+              literal_eval(b64decode(unquote(partes.query)).decode()) == {"action": "catalogo", "clasico": 1})
+    r = abrir("?accion=deportes_fuentes")
+    comprobar("Mis fuentes identifica la variante instalada", any(i[0] == "Configurar EKHorus" for i in r["items"]))
+    abrir("?accion=deportes_horus")
+    comprobar("Palantix abre los ajustes de EKHorus", ajustes_ace == ["EKHorus"])
+    r = abrir(consulta_ace)
+    comprobar("EKHorus recibe el enlace Ace Stream", r["resuelto"][0] and r["resuelto"][1].endswith(cid))
 finally:
+    sys.modules["xbmcaddon"].Addon = addon_original
     sys.modules["xbmc"].getCondVisibility = visibilidad_original
 r = abrir("?accion=cine_libre")
 comprobar("cine libre: muestra categorías", any(i[0] == "Documentales" for i in r["items"]))

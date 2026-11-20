@@ -883,6 +883,9 @@ def entrada_deporte(titulo, enlace, poster=""):
 def menu_deportes():
     carpeta("Hoy", url(accion="deportes_hoy"))
     carpeta("Canales en directo", url(accion="deportes_canales"), "DefaultTVShows.png")
+    reproductor = complemento_ace_stream()
+    if reproductor and reproductor.getAddonInfo("name").casefold() == "ekhorus":
+        carpeta("Canales de EKHorus", deportes.ruta_catalogo_ekhorus(), "DefaultTVShows.png")
     carpeta("Mis fuentes", url(accion="deportes_fuentes"), "DefaultPlaylist.png")
     return fin_listado()
 
@@ -900,7 +903,9 @@ def perfil_deportes():
 def fuentes_deportes():
     carpeta("Añadir lista M3U o JSON", url(accion="deportes_anadir", tipo="lista"), "DefaultAddSource.png")
     carpeta("Añadir enlace Ace Stream", url(accion="deportes_anadir", tipo="ace"), "DefaultAddSource.png")
-    carpeta("Configurar Ace Stream", url(accion="deportes_horus"), "DefaultAddonService.png")
+    reproductor = complemento_ace_stream()
+    nombre = reproductor.getAddonInfo("name") if reproductor else "Ace Stream"
+    carpeta("Configurar " + nombre, url(accion="deportes_horus"), "DefaultAddonService.png")
     for fuente in mislistas.leer(perfil_deportes()):
         origen = fuente["origen"]
         li = xbmcgui.ListItem(fuente["nombre"])
@@ -979,24 +984,29 @@ def listar_deportes(hoy=False):
     return fin_listado()
 
 
-def horus_disponible():
-    if xbmc.getCondVisibility("System.HasAddon(%s)" % deportes.HORUS):
-        return True
-    xbmcgui.Dialog().ok("Ace Stream", "Instala y activa Horus en Kodi y configura el motor Ace Stream de tu dispositivo. "
-                        "Después puedes gestionar los enlaces y listas desde Deportes → Mis fuentes.")
-    return False
+def complemento_ace_stream(avisar=False):
+    if xbmc.getCondVisibility("System.AddonIsEnabled(%s)" % deportes.HORUS):
+        try:
+            return xbmcaddon.Addon(deportes.HORUS)
+        except RuntimeError:
+            pass
+    if avisar:
+        xbmcgui.Dialog().ok("Ace Stream", "Instala y activa Horus o EKHorus en Kodi y configura el motor Ace Stream "
+                            "para tu dispositivo. Después puedes gestionar tus enlaces en Deportes → Mis fuentes.")
+    return None
 
 
 def configurar_horus():
-    if horus_disponible():
-        xbmcaddon.Addon(deportes.HORUS).openSettings()
+    reproductor = complemento_ace_stream(avisar=True)
+    if reproductor:
+        reproductor.openSettings()
 
 
 def reproducir_deporte():
     enlace = PARAMS.get("u", "")
     horus = deportes.ruta_horus(enlace)
     if horus:
-        ruta = horus if horus_disponible() else ""
+        ruta = horus if complemento_ace_stream(avisar=True) else ""
     else:
         ruta = enlace if deportes.es_web(enlace) else ""
     xbmcplugin.setResolvedUrl(HANDLE, bool(ruta), xbmcgui.ListItem(path=ruta))
