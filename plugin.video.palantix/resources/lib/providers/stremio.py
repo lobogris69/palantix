@@ -1,5 +1,13 @@
 """Fuentes de un complemento Stremio configurado por el usuario."""
 import re
+import sqlite3
+import time
+from contextlib import closing
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+from pathlib import Path
+from threading import Lock
+from urllib.error import HTTPError
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 from .. import http
@@ -30,11 +38,46 @@ def _texto(valor):
 class Stremio(Proveedor):
     id = "stremio"
 
-    def __init__(self, manifiesto, numero, log=print, fallo=lambda proveedor: None):
+    def __init__(self, manifiesto, numero, log=print, fallo=lambda proveedor: None, cache=None):
         self.manifiesto = manifiesto
         self.nombre = "Stremio %d" % numero
         self.log = log
         self.fallo = fallo
+        self.cache = Path(cache) if cache else None
+        self._manifiesto = None
+        self._bloqueo_manifiesto = Lock()
+
+    def _pedir(self, url):
+        host = urlsplit(url).hostname or ""
+        if self.cache is None or not (host == "pelis-addon.com" or host.endswith(".pelis-addon.com")):
+            return http.get_json(url, timeout=8, https_only=True)
+
+        ahora = time.time()
+        self.cache.mkdir(parents=True, exist_ok=True)
+        with closing(sqlite3.connect(str(self.cache / "stremio-pelis.sqlite"))) as db:
+            with db:
+                db.execute("CREATE TABLE IF NOT EXISTS peticiones (fecha REAL)")
+                db.execute("CREATE TABLE IF NOT EXISTS bloqueos (hasta REAL)")
+                db.execute("DELETE FROM peticiones WHERE fecha <= ?", (ahora - 600,))
+                db.execute("DELETE FROM bloqueos WHERE hasta <= ?", (ahora,))
+                if (db.execute("SELECT 1 FROM bloqueos LIMIT 1").fetchone()
+                        or db.execute("SELECT count(*) FROM peticiones").fetchone()[0] >= 50):
+                    raise OSError("Pelis: límite temporal de peticiones")
+                db.execute("INSERT INTO peticiones VALUES (?)", (ahora,))
+            try:
+                return http.get_json(url, timeout=8, https_only=True)
+            except HTTPError as error:
+                if error.code == 429:
+                    retry = (error.headers or {}).get("Retry-After", "")
+                    try:
+                        espera = int(retry) if retry.isdigit() else (
+                            parsedate_to_datetime(retry).astimezone(timezone.utc) -
+                            datetime.now(timezone.utc)).total_seconds()
+                    except (ValueError, TypeError, OverflowError):
+                        espera = 86400
+                    with db:
+                        db.execute("INSERT INTO bloqueos VALUES (?)", (time.time() + max(600, espera),))
+                raise
 
     def buscar(self, peli):
         if not re.fullmatch(r"tt[0-9]+", peli.imdb_id):
@@ -45,7 +88,7 @@ class Stremio(Proveedor):
             video += ":%d:%d" % (peli.temporada, peli.episodio)
         try:
             return self._buscar(tipo, video)
-        except (OSError, ValueError, TypeError):
+        except (OSError, ValueError, TypeError, sqlite3.Error):
             self.fallo(self.nombre)
             self.log("[Palantix] %s: no se pudo consultar el complemento" % self.nombre)
             return []
@@ -54,17 +97,20 @@ class Stremio(Proveedor):
         partes = _url_http(self.manifiesto, ("https",))
         if not partes or not partes.path.endswith("/manifest.json"):
             raise ValueError("URL de manifiesto inválida")
-        manifiesto = http.get_json(self.manifiesto, timeout=8, https_only=True)
-        if not isinstance(manifiesto, dict) or not isinstance(manifiesto.get("resources"), list):
-            raise ValueError("Manifiesto inválido")
-        return partes, manifiesto
+        with self._bloqueo_manifiesto:
+            if self._manifiesto is None:
+                manifiesto = self._pedir(self.manifiesto)
+                if not isinstance(manifiesto, dict) or not isinstance(manifiesto.get("resources"), list):
+                    raise ValueError("Manifiesto inválido")
+                self._manifiesto = manifiesto
+            return partes, self._manifiesto
 
     def _buscar(self, tipo, video):
         partes, manifiesto = self.leer_manifiesto()
         if not self._admite(manifiesto, tipo, video):
             return []
         ruta = partes.path[:-len("manifest.json")] + "stream/%s/%s.json" % (tipo, quote(video, safe=":"))
-        respuesta = http.get_json(urlunsplit(partes._replace(path=ruta)), timeout=8, https_only=True)
+        respuesta = self._pedir(urlunsplit(partes._replace(path=ruta)))
         if not isinstance(respuesta, dict) or not isinstance(respuesta.get("streams"), list):
             raise ValueError("Respuesta de streams inválida")
         nombre = _texto(manifiesto.get("name")) or self.nombre

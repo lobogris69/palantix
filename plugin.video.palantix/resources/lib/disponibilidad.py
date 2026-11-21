@@ -75,12 +75,15 @@ def comprobar_lote(carpeta, configuracion, consultar):
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         resultados = list(pool.map(consultar, (json.loads(p) for _, p in lote)))
+    comprobados = [(i, disponible) for (i, _), disponible in zip(lote, resultados) if disponible is not None]
+    if not comprobados:
+        return
     ahora = int(time.time())
     with _abrir(carpeta) as db:
         db.executemany("INSERT OR REPLACE INTO peliculas VALUES (?, ?, ?, ?)",
                        [(clave, i, int(disponible), ahora + (DIA if disponible else 3600))
-                        for (i, _), disponible in zip(lote, resultados)])
-        db.executemany("DELETE FROM pendientes WHERE config = ? AND id = ?", [(clave, i) for i, _ in lote])
+                        for i, disponible in comprobados])
+        db.executemany("DELETE FROM pendientes WHERE config = ? AND id = ?", [(clave, i) for i, _ in comprobados])
         db.execute("INSERT OR REPLACE INTO estado VALUES (?, ?)", (clave, ahora))
 
 
