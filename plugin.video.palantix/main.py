@@ -18,7 +18,7 @@ from resources.lib import actualizar, debrid, inicio, mislistas, novedades, prog
 from resources.lib import tmdb as tmdb_mod
 from resources.lib.providers import Peli
 from resources.lib.providers import cine_libre
-from resources.lib.providers.stremio import Stremio
+from resources.lib.providers.stremio import Stremio, motivo_error
 
 ADDON = xbmcaddon.Addon()
 BASE = sys.argv[0]
@@ -1270,8 +1270,8 @@ def comprobar_manifiestos():
                 admite = any(r == "stream" or (isinstance(r, dict) and r.get("name") == "stream")
                              for r in recursos)
                 estado = "Manifiesto accesible" if admite else "Manifiesto sin recurso de reproducción"
-            except (OSError, ValueError, TypeError, sqlite3.Error):
-                estado = "No se pudo leer el manifiesto"
+            except (OSError, ValueError, TypeError, sqlite3.Error) as error:
+                estado = motivo_error(error)
         lineas.append("Fuente %d · %s" % (n, estado))
     xbmcgui.Dialog().ok("Fuentes de Stremio", "\n".join(lineas))
 
@@ -1401,7 +1401,7 @@ def reproducir():
     ordenadas = etiquetas.ordenar(fuentes, **pref)
     if not ordenadas:
         if fallos:
-            aviso("Búsqueda incompleta. Sin respuesta de: " + ", ".join(sorted(set(fallos))))
+            aviso("Búsqueda incompleta: " + ", ".join(sorted(set(fallos))))
         else:
             aviso("No hay fuentes para «%s»%s" % (nombre, " en tu idioma" if fuentes else ""))
         return no_reproducir()
@@ -1414,7 +1414,7 @@ def reproducir():
                   for f, a in ordenadas]
         titulo_selector = "Elige fuente · " + ORDENES_FUENTES[pref["calidad_primero"]]
         if fallos:
-            aviso("Búsqueda incompleta. Sin respuesta de: " + ", ".join(sorted(set(fallos))))
+            aviso("Búsqueda incompleta: " + ", ".join(sorted(set(fallos))))
         n = xbmcgui.Dialog().select(titulo_selector, textos)
         if n < 0:
             return no_reproducir()

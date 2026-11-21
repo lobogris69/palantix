@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from threading import Lock
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 from .. import http
@@ -33,6 +33,30 @@ def _texto(valor):
     if isinstance(valor, str):
         return " ".join(valor.replace("[", "(").replace("]", ")").split())[:240]
     return ""
+
+
+class PausaPelis(OSError):
+    def __init__(self, segundos, del_proveedor=False):
+        minutos = max(1, int((segundos + 59) // 60))
+        motivo = "bloqueo comunicado por Pelis" if del_proveedor else "límite de consultas de Palantix"
+        super().__init__("%s, vuelve a probar en %d min" % (motivo, minutos))
+
+
+def motivo_error(error):
+    """Texto para la interfaz sin mostrar la URL privada del complemento."""
+    if isinstance(error, PausaPelis):
+        return str(error)
+    if isinstance(error, HTTPError):
+        motivos = {401: "configuración rechazada", 403: "acceso denegado",
+                   404: "ruta no disponible", 429: "demasiadas peticiones"}
+        return "HTTP %d%s" % (error.code, " · " + motivos[error.code] if error.code in motivos else "")
+    if isinstance(error, TimeoutError) or (isinstance(error, URLError) and isinstance(error.reason, TimeoutError)):
+        return "tiempo de espera agotado"
+    if isinstance(error, sqlite3.Error):
+        return "no se pudo consultar el límite local"
+    if isinstance(error, ValueError):
+        return "configuración o respuesta inválida"
+    return "error de conexión o de respuesta"
 
 
 class Stremio(Proveedor):
@@ -61,9 +85,12 @@ class Stremio(Proveedor):
                 db.execute("CREATE TABLE IF NOT EXISTS bloqueos (hasta REAL)")
                 db.execute("DELETE FROM peticiones WHERE fecha <= ?", (ahora - 600,))
                 db.execute("DELETE FROM bloqueos WHERE hasta <= ?", (ahora,))
-                if (db.execute("SELECT 1 FROM bloqueos LIMIT 1").fetchone()
-                        or db.execute("SELECT count(*) FROM peticiones").fetchone()[0] >= self.limite_pelis):
-                    raise OSError("Pelis: límite temporal de peticiones")
+                hasta = db.execute("SELECT max(hasta) FROM bloqueos").fetchone()[0]
+                if hasta is not None:
+                    raise PausaPelis(hasta - ahora, del_proveedor=True)
+                cantidad, primera = db.execute("SELECT count(*), min(fecha) FROM peticiones").fetchone()
+                if cantidad >= self.limite_pelis:
+                    raise PausaPelis(primera + 600 - ahora)
                 db.execute("INSERT INTO peticiones VALUES (?)", (ahora,))
             try:
                 return http.get_json(url, timeout=8, https_only=True)
@@ -89,9 +116,10 @@ class Stremio(Proveedor):
             video += ":%d:%d" % (peli.temporada, peli.episodio)
         try:
             return self._buscar(tipo, video)
-        except (OSError, ValueError, TypeError, sqlite3.Error):
-            self.fallo(self.nombre)
-            self.log("[Palantix] %s: no se pudo consultar el complemento" % self.nombre)
+        except (OSError, ValueError, TypeError, sqlite3.Error) as error:
+            aviso = "%s (%s)" % (self.nombre, motivo_error(error))
+            self.fallo(aviso)
+            self.log("[Palantix] " + aviso)
             return []
 
     def leer_manifiesto(self):
