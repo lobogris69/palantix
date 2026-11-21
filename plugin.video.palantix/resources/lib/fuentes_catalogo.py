@@ -47,7 +47,7 @@ def consulta(t, ajustes, listas_url, cache, log, fallo=lambda proveedor: None):
             if origen:
                 manifiestos.append((n, origen))
     extra = [ListaURL(listas_url, cache, max(1, _entero(ajustes, "cache_min", 60)) * 60, log, fallo)] if any(listas_url) else []
-    extra += [Stremio(origen, n, log, fallo) for n, origen in manifiestos]
+    extra += [Stremio(origen, n, log, fallo, cache=cache) for n, origen in manifiestos]
 
     def buscar(peli):
         if manifiestos and not peli.imdb_id and t and peli.tmdb_id:

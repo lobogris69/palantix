@@ -1,6 +1,7 @@
 """Punto de entrada del addon. Kodi lo llama con: sys.argv = [url_base, handle, '?parametros']."""
 import json
 import os
+import sqlite3
 import sys
 import time
 from datetime import datetime
@@ -163,6 +164,8 @@ def marca_serie(sid):
         return color("● NUEVO", VERDE)
     if n.get("pendientes"):
         return color("%d pendiente%s" % (n["pendientes"], "" if n["pendientes"] == 1 else "s"), AZUL)
+    if str(sid) in mis_series():
+        return color("EN SEGUIMIENTO", AZUL)
     return ""
 
 
@@ -402,7 +405,9 @@ def ficha_serie(s):
     nov = mis_novedades().get(str(s["id"])) or {}
     if nov.get("pendientes"):  # la piel pinta el número de capítulos pendientes sobre la carátula
         li.setProperty("UnWatchedEpisodes", str(nov["pendientes"]))
-        li.setLabel("%s  %s" % (li.getLabel(), marca_serie(s["id"])))
+    marca = marca_serie(s["id"])
+    if marca:
+        li.setLabel("%s  %s" % (li.getLabel(), marca))
     destino = url(accion="temporadas", id=s["id"], titulo=titulo, original=s.get("original_name", ""), anio=anio)
     return destino, li, True
 
@@ -1260,12 +1265,12 @@ def comprobar_manifiestos():
         estado = "Sin configurar"
         if origen:
             try:
-                _, datos = Stremio(origen, n).leer_manifiesto()
+                _, datos = Stremio(origen, n, cache=CACHE).leer_manifiesto()
                 recursos = datos["resources"]
                 admite = any(r == "stream" or (isinstance(r, dict) and r.get("name") == "stream")
                              for r in recursos)
                 estado = "Manifiesto accesible" if admite else "Manifiesto sin recurso de reproducción"
-            except (OSError, ValueError, TypeError):
+            except (OSError, ValueError, TypeError, sqlite3.Error):
                 estado = "No se pudo leer el manifiesto"
         lineas.append("Fuente %d · %s" % (n, estado))
     xbmcgui.Dialog().ok("Fuentes de Stremio", "\n".join(lineas))
