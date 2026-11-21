@@ -38,12 +38,13 @@ def _texto(valor):
 class Stremio(Proveedor):
     id = "stremio"
 
-    def __init__(self, manifiesto, numero, log=print, fallo=lambda proveedor: None, cache=None):
+    def __init__(self, manifiesto, numero, log=print, fallo=lambda proveedor: None, cache=None, segundo_plano=False):
         self.manifiesto = manifiesto
         self.nombre = "Stremio %d" % numero
         self.log = log
         self.fallo = fallo
         self.cache = Path(cache) if cache else None
+        self.limite_pelis = 35 if segundo_plano else 50
         self._manifiesto = None
         self._bloqueo_manifiesto = Lock()
 
@@ -61,7 +62,7 @@ class Stremio(Proveedor):
                 db.execute("DELETE FROM peticiones WHERE fecha <= ?", (ahora - 600,))
                 db.execute("DELETE FROM bloqueos WHERE hasta <= ?", (ahora,))
                 if (db.execute("SELECT 1 FROM bloqueos LIMIT 1").fetchone()
-                        or db.execute("SELECT count(*) FROM peticiones").fetchone()[0] >= 50):
+                        or db.execute("SELECT count(*) FROM peticiones").fetchone()[0] >= self.limite_pelis):
                     raise OSError("Pelis: límite temporal de peticiones")
                 db.execute("INSERT INTO peticiones VALUES (?)", (ahora,))
             try:
