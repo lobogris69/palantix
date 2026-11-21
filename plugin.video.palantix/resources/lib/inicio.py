@@ -69,8 +69,12 @@ def elemento_pelicula(m, url):
                                              original=m.get("original_title", ""), anio=_anio(m.get("release_date")))}
 
 
-def elemento_serie(s, url):
-    return {"label": s.get("name") or s.get("original_name") or "?", "plot": s.get("overview", ""),
+def elemento_serie(s, url, seguidas=(), nov=None):
+    sid = str(s["id"])
+    estado = (nov or {}).get(sid) or {}
+    marca = "● NUEVO CAPÍTULO" if estado.get("nuevo") else "EN SEGUIMIENTO" if sid in seguidas else ""
+    return {"destacado": marca, "nuevo": "1" if estado.get("nuevo") else "",
+            "seguida": "1" if sid in seguidas and not estado.get("nuevo") else "", "label": s.get("name") or s.get("original_name") or "?", "plot": s.get("overview", ""),
             "poster": _img(s.get("poster_path")), "fanart": _img(s.get("backdrop_path"), "w1280"),
             "thumb": _img(s.get("backdrop_path"), "w780"),
             "info": _info(_anio(s.get("first_air_date")), _nota(s.get("vote_average")), "Serie"),
@@ -147,7 +151,11 @@ def datos_pestana(perfil, t, url, pestana, filtrar_peliculas=lambda pelis: pelis
     if pestana == "peliculas":
         visibles = {str(m["id"]) for m in filtrar_peliculas([m for fila in crudo.values() for m in fila])}
         crudo = {fid: [m for m in fila if str(m["id"]) in visibles] for fid, fila in crudo.items()}
-    hacer = elemento_pelicula if pestana == "peliculas" else elemento_serie
+    if pestana == "series":
+        seguidas = seguimiento.leer(perfil)
+        nov = novedades.leer(perfil)
+        return {fid: [elemento_serie(x, url, seguidas, nov) for x in crudo.get(fid, [])] for fid, _, _ in filas}
+    hacer = elemento_pelicula
     return {fid: [hacer(x, url) for x in crudo.get(fid, [])] for fid, _, _ in filas}
 
 
@@ -161,6 +169,7 @@ def datos_filas(perfil, t, url, favoritas=(), filtrar_peliculas=lambda pelis: pe
     """{id_fila: [elementos]} listos para pintar."""
     filas = {fid: [] for fid, _ in FILAS}
     nov = novedades.leer(perfil)
+    seguidas = seguimiento.leer(perfil)
 
     # 101 Continuar viendo: películas a medias + siguiente capítulo de las series empezadas
     a_medias = progreso.peliculas(perfil)[:10]
@@ -200,14 +209,14 @@ def datos_filas(perfil, t, url, favoritas=(), filtrar_peliculas=lambda pelis: pe
     # 103-106 catálogo de TMDB
     if t:
         filas[103] = [elemento_pelicula(m, url) for m in tm.get("tendencias", []) if str(m["id"]) in visibles]
-        filas[104] = [elemento_serie(s, url) for s in tm.get("series", [])]
+        filas[104] = [elemento_serie(s, url, seguidas, nov) for s in tm.get("series", [])]
         filas[105] = [elemento_pelicula(m, url) for m in tm.get("cines", []) if str(m["id"]) in visibles]
         filas[106] = [elemento_pelicula(m, url) for m in tm.get("valoradas", []) if str(m["id"]) in visibles]
 
     # 107 Mi lista (favoritas)
     filas[107] = [elemento_pelicula(m, url) for m in favoritas if str(m["id"]) in visibles]
     filas[108] = [elemento_pelicula(m, url) for m in tm.get("streaming", []) if str(m["id"]) in visibles]
-    filas[111] = [elemento_serie(serie, url) for serie in tm.get("capitulos_recientes", [])]
+    filas[111] = [elemento_serie(serie, url, seguidas, nov) for serie in tm.get("capitulos_recientes", [])]
     return filas
 
 
@@ -245,7 +254,7 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
         tag.setPlot(e.get("plot", ""))
         if e.get("resume"):
             tag.setResumePoint(float(e["resume"][0]), float(e["resume"][1]))
-        for k in ("info", "destacado", "nuevo", "tipo", "url"):
+        for k in ("info", "destacado", "nuevo", "seguida", "tipo", "url"):
             item.setProperty(k, e.get(k, ""))
         return item
 

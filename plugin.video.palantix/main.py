@@ -1,6 +1,7 @@
 """Punto de entrada del addon. Kodi lo llama con: sys.argv = [url_base, handle, '?parametros']."""
 import json
 import os
+import sqlite3
 import sys
 import time
 from datetime import datetime
@@ -163,6 +164,8 @@ def marca_serie(sid):
         return color("● NUEVO", VERDE)
     if n.get("pendientes"):
         return color("%d pendiente%s" % (n["pendientes"], "" if n["pendientes"] == 1 else "s"), AZUL)
+    if str(sid) in mis_series():
+        return color("EN SEGUIMIENTO", AZUL)
     return ""
 
 
@@ -402,7 +405,9 @@ def ficha_serie(s):
     nov = mis_novedades().get(str(s["id"])) or {}
     if nov.get("pendientes"):  # la piel pinta el número de capítulos pendientes sobre la carátula
         li.setProperty("UnWatchedEpisodes", str(nov["pendientes"]))
-        li.setLabel("%s  %s" % (li.getLabel(), marca_serie(s["id"])))
+    marca = marca_serie(s["id"])
+    if marca:
+        li.setLabel("%s  %s" % (li.getLabel(), marca))
     destino = url(accion="temporadas", id=s["id"], titulo=titulo, original=s.get("original_name", ""), anio=anio)
     return destino, li, True
 
@@ -893,7 +898,8 @@ def menu_deportes():
 
 def canales_deportes():
     for titulo, enlace in deportes.CANALES:
-        entrada_deporte(titulo, enlace)
+        if enlace:
+            entrada_deporte(titulo, enlace)
     return fin_listado()
 
 
@@ -905,8 +911,8 @@ def guia_deportes():
         aviso("No se pudo descargar la guía dobleM")
         datos = {"nombres": {}, "programas": {}}
 
-    canales = [(nombre, epg.IDS_PALANTIX.get(nombre, nombre), enlace)
-               for nombre, enlace in deportes.CANALES]
+    canales = {epg.IDS_PALANTIX.get(nombre, nombre): (nombre, enlace)
+               for nombre, enlace in deportes.CANALES}
     reproductor = complemento_ace_stream()
     if reproductor and reproductor.getAddonInfo("name").casefold() == "ekhorus":
         ruta = xbmcvfs.translatePath(
@@ -916,15 +922,15 @@ def guia_deportes():
         except (OSError, ValueError):
             exportados = []
         nombres = epg.indice_nombres(datos)
-        vistos = {cid for _, cid, _ in canales}
+        vistos = set()
         for item in exportados:
             cid = nombres.get(epg.normalizar(item["titulo"]))
             enlace = deportes.ruta_canal_ekhorus(item["url"])
             if cid and cid not in vistos and enlace:
-                canales.append((item["titulo"], cid, enlace))
+                canales[cid] = (canales.get(cid, (item["titulo"], enlace))[0], enlace)
                 vistos.add(cid)
 
-    for nombre, cid, enlace in canales:
+    for cid, (nombre, enlace) in canales.items():
         actual, siguiente = epg.ahora_y_despues(datos["programas"].get(cid, []), hora)
         partes = [nombre]
         for etiqueta, programa in (("Ahora", actual), ("Después", siguiente)):
@@ -933,7 +939,10 @@ def guia_deportes():
                 partes.append("%s %s: %s" % (etiqueta, inicio, programa[2]))
         if not actual and not siguiente:
             partes.append("Sin programación disponible")
-        if deportes.es_web(enlace):
+        if not enlace:
+            partes.append("Sin señal directa")
+            xbmcplugin.addDirectoryItem(HANDLE, "", xbmcgui.ListItem(" · ".join(partes)))
+        elif deportes.es_web(enlace):
             entrada_deporte(" · ".join(partes), enlace)
         else:
             li = xbmcgui.ListItem(" · ".join(partes))
@@ -1256,12 +1265,12 @@ def comprobar_manifiestos():
         estado = "Sin configurar"
         if origen:
             try:
-                _, datos = Stremio(origen, n).leer_manifiesto()
+                _, datos = Stremio(origen, n, cache=CACHE).leer_manifiesto()
                 recursos = datos["resources"]
                 admite = any(r == "stream" or (isinstance(r, dict) and r.get("name") == "stream")
                              for r in recursos)
                 estado = "Manifiesto accesible" if admite else "Manifiesto sin recurso de reproducción"
-            except (OSError, ValueError, TypeError):
+            except (OSError, ValueError, TypeError, sqlite3.Error):
                 estado = "No se pudo leer el manifiesto"
         lineas.append("Fuente %d · %s" % (n, estado))
     xbmcgui.Dialog().ok("Fuentes de Stremio", "\n".join(lineas))

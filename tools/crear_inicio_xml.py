@@ -53,6 +53,10 @@ def capa_item(forma, enfocado, fid=0):
              '<control type="image"><width>110</width><height>34</height><texture colordiffuse="FF1DB954">pildora.png</texture></control>'
              '<control type="label"><width>110</width><height>34</height><align>center</align><aligny>center</aligny>'
              '<font>font10</font><textcolor>FFFFFFFF</textcolor><label>[B]NUEVO[/B]</label></control></control>' % (w - 104))
+    seguida = ('<control type="group"><left>15</left><top>20</top><visible>String.IsEqual(ListItem.Property(seguida),1)</visible>'
+               '<control type="image"><width>114</width><height>34</height><texture colordiffuse="FF2764A3">pildora.png</texture></control>'
+               '<control type="label"><width>114</width><height>34</height><align>center</align><aligny>center</aligny>'
+               '<font>font10</font><textcolor>FFFFFFFF</textcolor><label>[B]SIGUIENDO[/B]</label></control></control>')
     return ('<control type="group">%s%s'
             '<control type="image"><left>10</left><top>18</top><width>%d</width><height>%d</height>'
             '<texture colordiffuse="FF22242E">blanco.png</texture><visible>String.IsEmpty(%s)</visible></control>'
@@ -61,9 +65,9 @@ def capa_item(forma, enfocado, fid=0):
             '<label>$INFO[ListItem.Label]</label><visible>String.IsEmpty(%s)</visible></control>'
             '<control type="image"><left>10</left><top>18</top><width>%d</width><height>%d</height>'
             '<texture diffuse="%s" background="true">%s</texture><aspectratio>scale</aspectratio></control>'
-            '%s%s%s%s</control>' % (zoom, sombra, w, h, arte.replace("$INFO[", "").rstrip("]"),
+            '%s%s%s%s%s</control>' % (zoom, sombra, w, h, arte.replace("$INFO[", "").rstrip("]"),
                                     w - 20, h - 20, arte.replace("$INFO[", "").rstrip("]"),
-                                    w, h, mascara, arte, borde, progreso, nuevo, titulo))
+                                    w, h, mascara, arte, borde, progreso, nuevo, seguida, titulo))
 
 
 def fila(fid, forma, siguiente, anterior):
