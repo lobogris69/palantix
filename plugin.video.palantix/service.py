@@ -10,7 +10,6 @@ main.py deja los datos de lo que va a sonar en propiedades de la ventana princip
 """
 import json
 import os
-from threading import local
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -231,18 +230,15 @@ def comprobar_fuentes():
     idioma, region = tmdb.idioma_de(ajustes("idioma_cat") or 0)
     cliente = tmdb.TMDB(clave, idioma, region) if clave else None
     origenes = [l["origen"] for l in mislistas.leer(perfil)]
-    consulta = local()
-
-    def fallo(_proveedor):
-        consulta.incompleta = True
-
-    buscar, proveedores = fuentes_catalogo.consulta(cliente, ajustes, origenes, cache, log, fallo)
+    _, proveedores = fuentes_catalogo.consulta(cliente, ajustes, origenes, cache, log)
     pref = fuentes_catalogo.preferencias(ajustes)
 
     def consultar(ficha):
-        consulta.incompleta = False
+        fallos = []
+        buscar, _ = fuentes_catalogo.consulta(
+            cliente, ajustes, origenes, cache, log, fallos.append, segundo_plano=True)
         disponible = fuentes_catalogo.hay_fuentes(ficha, buscar, pref)
-        return None if consulta.incompleta and not disponible else disponible
+        return None if fallos and not disponible else disponible
 
     if episodios:
         disponibilidad.comprobar_lote(cache, (proveedores, pref, "episodios"), consultar)

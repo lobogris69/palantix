@@ -263,6 +263,11 @@ comprobar("lista M3U: título y año separados", r["items"] and r["items"][0][0]
 r = abrir("?" + urlencode({"accion": "reproducir_directo", "u": "https://ejemplo.invalid/kid.mp4"}))
 comprobar("reproducción directa desde lista", r["resuelto"] == (True, "https://ejemplo.invalid/kid.mp4"))
 
+REGISTRO["select"] = -1
+r = abrir("?" + urlencode({"accion": "reproducir", "id": 653, "titulo": "Nosferatu", "anio": "1922"}))
+comprobar("sin reproducción automática, una sola fuente requiere confirmación",
+          r["resuelto"] == (False, ""))
+REGISTRO["select"] = 0
 r = abrir("?" + urlencode({"accion": "reproducir", "id": 653, "titulo": "Nosferatu", "anio": "1922"}))
 comprobar("ficha TMDB encuentra su fuente en la lista por tmdb_id", r["resuelto"] == (True, "https://ejemplo.invalid/nosferatu.mp4"))
 

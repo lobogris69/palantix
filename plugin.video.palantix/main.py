@@ -1407,12 +1407,15 @@ def reproducir():
         return no_reproducir()
 
     automatico = ADDON.getSetting("autoplay") == "true" and not PARAMS.get("elegir")
-    if automatico or len(ordenadas) == 1:
+    if automatico:
         candidatas = ordenadas  # si la mejor falla, se prueba la siguiente
     else:
         textos = ["%s  %s · %s" % (marcas_visibles(a) or etiquetas.texto_etiquetas(a), f.proveedor, f.etiqueta)
                   for f, a in ordenadas]
-        n = xbmcgui.Dialog().select("Elige fuente · " + ORDENES_FUENTES[pref["calidad_primero"]], textos)
+        titulo_selector = "Elige fuente · " + ORDENES_FUENTES[pref["calidad_primero"]]
+        if fallos:
+            aviso("Búsqueda incompleta. Sin respuesta de: " + ", ".join(sorted(set(fallos))))
+        n = xbmcgui.Dialog().select(titulo_selector, textos)
         if n < 0:
             return no_reproducir()
         candidatas = [ordenadas[n]]
