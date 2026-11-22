@@ -249,7 +249,7 @@ comprobar("inicio: la segunda vez abre al instante (catálogo en caché, sin ped
 filas = inicio.datos_filas(tempfile.mkdtemp(), None, url)
 comprobar("inicio: sin clave de TMDB no se rompe (filas vacías)", all(v == [] for v in filas.values()))
 comprobar("inicio: menú lateral con Buscar, Películas, Series... y Menú clásico",
-          [m[0] for m in inicio.menu(url)] == ["Inicio", "Buscar", "Películas", "Series", "Mis series", "Mi lista",
+          [m[0] for m in inicio.menu(url)] == ["Inicio", "Hoy para ti", "Buscar", "Películas", "Series", "Mis series", "Mi lista",
                                                 "Cine libre y documentales", "Deportes", "Mis listas", "Ajustes", "Actualizar", "Menú clásico", "Salir"])
 
 # ---------------------------------------------------------------- pestañas Películas y Series
@@ -277,7 +277,7 @@ inicio.datos_pestana(PP, TPestanas(), url, "peliculas")
 comprobar("pestañas: la segunda vez abren al instante (caché)", TFalso.llamadas == antes)
 comprobar("pestañas: títulos de las filas", inicio.titulos("series")[110] == "Documentales" and inicio.titulos("inicio")[101] == "Continuar viendo")
 comprobar("menú lateral: Películas y Series cambian de pestaña sin salir",
-          [(m[0], m[2], m[3]) for m in inicio.menu(url)][2:4] == [("Películas", "pestana", "peliculas"), ("Series", "pestana", "series")])
+          [(m[0], m[2], m[3]) for m in inicio.menu(url)][3:5] == [("Películas", "pestana", "peliculas"), ("Series", "pestana", "series")])
 
 print("\n%s" % ("TODO CORRECTO" if not fallos else "%d FALLOS" % fallos))
 sys.exit(1 if fallos else 0)

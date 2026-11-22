@@ -111,6 +111,9 @@ def _normaliza_item(d):
         "autor": (d.get("autor") or "").strip(),
         "licencia": (d.get("licencia") or "").strip(),
         "licencia_url": (d.get("licencia_url") or "").strip(),
+        "canal": str(d.get("canal") or d.get("channel") or "").strip(),
+        "fin": d.get("fin") or d.get("stop") or "",
+        "resultado_en_titulo": str(d.get("resultado-en-titulo") or d.get("resultado_en_titulo")).lower() in ("true", "1"),
         "inicio": d.get("inicio") or d.get("start") or "",
         "ficha_origen": (d.get("ficha_origen") or "").strip(),
     }
@@ -131,20 +134,20 @@ def _parsear_m3u(texto):
     return items
 
 
-def parsear(texto):
+def parsear(texto, eventos=False):
     t = texto.lstrip("﻿").strip()
     if t.startswith(("{", "[")):
         datos = json.loads(t)
         if isinstance(datos, dict):
-            crudos = datos.get("peliculas") or datos.get("movies") or []
+            crudos = datos.get("peliculas") or datos.get("movies") or (datos.get("eventos") if eventos else None) or []
         else:
             crudos = datos
     elif t.startswith("#EXTM3U") or "#EXTINF" in t[:2000]:
         crudos = _parsear_m3u(t)
     else:
         raise ValueError("Formato de lista no reconocido (usa JSON o M3U)")
-    return [i for i in (_normaliza_item(d) for d in crudos) if i["titulo"] and i["url"]]
+    return [i for i in (_normaliza_item(d) for d in crudos) if i["titulo"] and (i["url"] or (eventos and i["inicio"]))]
 
 
-def cargar(origen, cache_dir=None, ttl=3600):
-    return parsear(descargar(origen, cache_dir, ttl))
+def cargar(origen, cache_dir=None, ttl=3600, eventos=False):
+    return parsear(descargar(origen, cache_dir, ttl), eventos=eventos)

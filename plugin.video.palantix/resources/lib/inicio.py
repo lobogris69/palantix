@@ -220,6 +220,7 @@ def datos_filas(perfil, t, url, favoritas=(), filtrar_peliculas=lambda pelis: pe
 
 def menu(url, con_trakt=False):
     m = [("Inicio", "", "pestana", "inicio"),
+         ("Hoy para ti", "DefaultInProgressShows.png", "carpeta", url(accion="hoy_para_ti")),
          ("Buscar", "DefaultAddonsSearch.png", "carpeta", url(accion="buscar")),
          ("Películas", "DefaultMovies.png", "pestana", "peliculas"),
          ("Series", "DefaultTVShows.png", "pestana", "series"),
