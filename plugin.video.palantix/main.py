@@ -757,6 +757,7 @@ def trakt_cambiar_pendiente():
 
 
 def menu_trakt():
+    carpeta("Progreso de series", url(accion="trakt_progreso"), "DefaultInProgressShows.png")
     carpeta("Películas pendientes", url(accion="trakt_pend", tipo="movies"), "DefaultMovies.png")
     carpeta("Series pendientes", url(accion="trakt_pend", tipo="shows"), "DefaultTVShows.png")
     try:
@@ -765,6 +766,66 @@ def menu_trakt():
     except Exception as e:
         aviso(str(e))
     xbmcplugin.endOfDirectory(HANDLE)
+
+
+def trakt_progreso_series():
+    tk = trakt.Trakt(AJ, log=log)
+    if not tk.encendido():
+        aviso("Vincula y activa Trakt para ver el progreso de tus series")
+        return fin_listado(ok=False)
+    grupo = PARAMS.get("grupo")
+    if not grupo:
+        for clave, titulo in (("curso", "En curso"), ("dia", "Al día")):
+            carpeta(titulo, url(accion="trakt_progreso", grupo=clave), "DefaultTVShows.png")
+        return fin_listado()
+
+    try:
+        pagina = max(1, int(PARAMS.get("page", 1)))
+        series, hay_mas = tk.progreso_series(pagina)
+    except (OSError, ValueError, trakt.TraktError):
+        aviso("No se pudo leer el historial de Trakt")
+        return fin_listado(ok=False)
+    xbmcplugin.setContent(HANDLE, "tvshows")
+    mostradas = 0
+    incompletas = False
+    for serie, estado in series:
+        if estado is None:
+            incompletas = True
+            continue
+        emitidos, vistos = estado["aired"], estado["completed"]
+        pendientes = max(0, emitidos - vistos)
+        if bool(pendientes) != (grupo == "curso"):
+            continue
+        titulo = serie.get("title") or "Serie"
+        tmdb = (serie.get("ids") or {}).get("tmdb")
+        prox = estado.get("next_episode") or {}
+        temporada, capitulo = prox.get("season"), prox.get("number")
+        etiqueta = "%s · %d de %d vistos · %s" % (
+            titulo, vistos, emitidos, "%d pendientes" % pendientes if pendientes else "Al día")
+        if pendientes and temporada is not None and capitulo is not None:
+            etiqueta += " · Siguiente: %dx%02d" % (temporada, capitulo)
+            if prox.get("title"):
+                etiqueta += " " + prox["title"]
+        li = xbmcgui.ListItem(etiqueta)
+        li.setArt({"icon": "DefaultTVShows.png"})
+        comun = {"id": tmdb, "titulo": titulo, "anio": serie.get("year") or ""}
+        if tmdb and pendientes and temporada is not None and capitulo is not None:
+            destino = url(accion="reproducir", tipo="episodio", s=temporada, e=capitulo, elegir=1, **comun)
+            li.setProperty("IsPlayable", "true")
+            li.addContextMenuItems([("Ver temporadas", "Container.Update(%s)" % url(accion="temporadas", **comun))])
+            xbmcplugin.addDirectoryItem(HANDLE, destino, li, False)
+        elif tmdb:
+            xbmcplugin.addDirectoryItem(HANDLE, url(accion="temporadas", **comun), li, True)
+        else:
+            xbmcplugin.addDirectoryItem(HANDLE, "", li, False)
+        mostradas += 1
+    if hay_mas:
+        carpeta("Página siguiente", url(accion="trakt_progreso", grupo=grupo, page=pagina + 1))
+    if incompletas:
+        aviso("Trakt no devolvió el progreso de todas las series")
+    elif not mostradas:
+        aviso("No hay series en esta categoría en esta página")
+    return fin_listado()
 
 
 def trakt_pendientes(t):
@@ -1571,6 +1632,7 @@ SIN_TMDB = {
     "marcar_capitulo": marcar_capitulo,
     "a_medias": a_medias,
     "trakt": menu_trakt,
+    "trakt_progreso": trakt_progreso_series,
     "trakt_cambiar_pendiente": trakt_cambiar_pendiente,
     "quitar_medias": quitar_medias,
     "trailer": trailer,
