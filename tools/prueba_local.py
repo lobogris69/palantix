@@ -291,7 +291,7 @@ r = abrir("?accion=m_series")
 comprobar("menú Series con Capítulos recientes", len(r["items"]) == 7 and r["items"][0][0] == "Capítulos recientes")
 r = abrir("?accion=m_peliculas")
 comprobar("menú Películas con Novedades en streaming",
-          len(r["items"]) == 9 and any(i[0] == "Novedades en streaming" for i in r["items"]))
+          len(r["items"]) == 8 and any(i[0] == "Novedades en streaming" for i in r["items"]))
 r = abrir("?accion=anios&destino=anio")
 comprobar("por año: empieza por el año actual", r["items"][0][0] == __import__("time").strftime("%Y"))
 r = abrir("?accion=anio&a=2001")

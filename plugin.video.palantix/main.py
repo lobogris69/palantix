@@ -382,6 +382,7 @@ def ficha_pelicula(m):
          "RunPlugin(%s)" % url(accion="fav_quitar" if es_fav else "fav_poner",
                                id=m["id"], datos=json.dumps(guardable))),
     ])
+    acciones_trakt(li, "movies", m["id"])
     destino = url(accion="reproducir", id=m["id"], titulo=titulo,
                   original=m.get("original_title", ""), anio=anio)
     return destino, li, False
@@ -408,6 +409,7 @@ def ficha_serie(s):
     marca = marca_serie(s["id"])
     if marca:
         li.setLabel("%s  %s" % (li.getLabel(), marca))
+    acciones_trakt(li, "shows", s["id"])
     destino = url(accion="temporadas", id=s["id"], titulo=titulo, original=s.get("original_name", ""), anio=anio)
     return destino, li, True
 
@@ -491,7 +493,6 @@ def menu():
 def menu_peliculas():
     carpeta("Tendencias de la semana", url(accion="tendencias"))
     carpeta("Populares", url(accion="populares"))
-    carpeta("En cines", url(accion="en_cines"))
     carpeta("Novedades en streaming", url(accion="novedades_streaming"))
     carpeta("Mejor valoradas", url(accion="mejor_valoradas"))
     carpeta("Géneros", url(accion="generos"))
@@ -730,6 +731,31 @@ def _fichas_tmdb(t, elementos):
             for tipo, datos in fichas if tipo != "pelicula" or str(datos["id"]) in visibles]
 
 
+def acciones_trakt(li, tipo, tid):
+    if trakt.Trakt(AJ, log=log).encendido():
+        li.addContextMenuItems([("Pendientes de Trakt", "RunPlugin(%s)" %
+                                url(accion="trakt_cambiar_pendiente", tipo=tipo, id=tid))])
+
+
+def trakt_cambiar_pendiente():
+    tipo = PARAMS.get("tipo")
+    tk = trakt.Trakt(AJ, log=log)
+    if tipo not in ("movies", "shows") or not tk.encendido():
+        return
+    opciones = ["Añadir a pendientes de Trakt", "Quitar de pendientes de Trakt"]
+    elegir = xbmcgui.Dialog().select("Pendientes de Trakt", opciones)
+    if elegir < 0:
+        return
+    try:
+        resultado = tk.cambiar_pendiente(tipo, PARAMS["id"], elegir == 0)
+        if resultado.get("not_found", {}).get(tipo):
+            return aviso("Trakt no encuentra este título")
+    except (OSError, ValueError, trakt.TraktError):
+        return aviso("No se pudo actualizar la lista de Trakt")
+    aviso("Pendientes de Trakt actualizados")
+    xbmc.executebuiltin("Container.Refresh")
+
+
 def menu_trakt():
     carpeta("Películas pendientes", url(accion="trakt_pend", tipo="movies"), "DefaultMovies.png")
     carpeta("Series pendientes", url(accion="trakt_pend", tipo="shows"), "DefaultTVShows.png")
@@ -848,7 +874,16 @@ def marcar_capitulo():
     meta = {"tipo": "episodio", "tmdb": PARAMS["id"], "s": int(PARAMS["s"]), "e": int(PARAMS["e"]),
             "titulo": PARAMS.get("titulo"), "original": PARAMS.get("original"), "anio": PARAMS.get("anio"),
             "poster": PARAMS.get("poster"), "fanart": PARAMS.get("fondo")}
-    seguimiento.marcar_visto(PERFIL, meta, visto=PARAMS["visto"] == "1")
+    visto = PARAMS["visto"] == "1"
+    seguimiento.marcar_visto(PERFIL, meta, visto=visto)
+    tk = trakt.Trakt(AJ, log=log)
+    if tk.encendido():
+        try:
+            resultado = tk.marcar_visto(meta, visto)
+            if any(resultado.get("not_found", {}).values()):
+                aviso("Guardado en Palantix. Trakt no encuentra ese capítulo.")
+        except (OSError, ValueError, trakt.TraktError):
+            aviso("Guardado en Palantix. Falló la sincronización con Trakt.")
     xbmc.executebuiltin("Container.Refresh")
 
 
@@ -1536,6 +1571,7 @@ SIN_TMDB = {
     "marcar_capitulo": marcar_capitulo,
     "a_medias": a_medias,
     "trakt": menu_trakt,
+    "trakt_cambiar_pendiente": trakt_cambiar_pendiente,
     "quitar_medias": quitar_medias,
     "trailer": trailer,
     "ajustes": ADDON.openSettings,

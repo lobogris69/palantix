@@ -20,7 +20,7 @@ A partir de ahí las versiones nuevas llegan solas.
 ## Qué tiene
 
 **Catálogo**
-- Películas: Tendencias, Populares, En cines, Mejor valoradas, Géneros, **Por año**, **Sagas**, Buscar.
+- Películas: Tendencias, Populares, Novedades en streaming, Mejor valoradas, Géneros, **Por año**, **Sagas**, Buscar.
 - Series: Tendencias, Populares, Mejor valoradas, Géneros, Por año, Buscar → temporadas → capítulos.
 - Orden configurable (populares, recientes, mejor valoradas, alfabético) y 20/40/60 elementos por pantalla.
 - Búsquedas recientes recordadas.
