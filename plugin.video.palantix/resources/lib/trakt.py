@@ -3,6 +3,7 @@ lista de pendientes (watchlist) y listas personales.
 
 Usa el Client ID de la aplicación para vincular una cuenta con código de dispositivo.
 """
+from concurrent.futures import ThreadPoolExecutor
 import json
 import random
 import time
@@ -165,6 +166,39 @@ class Trakt:
         clave = "movie" if tipo == "movies" else "show"
         return [(x[clave]["ids"].get("tmdb"), x[clave].get("title"), x[clave].get("year"))
                 for x in self._ok("GET", "/sync/watchlist/%s" % tipo) if x.get(clave, {}).get("ids", {}).get("tmdb")]
+
+    def progreso_series(self, pagina, limite=12):
+        """Una página del historial, con la cuenta vinculada como origen del progreso."""
+        ruta = "/sync/watched/shows?page=%d&limit=%d" % (pagina, limite)
+        vistas = self._ok("GET", ruta)
+        if not isinstance(vistas, list):
+            raise TraktError("Trakt devolvió un historial no válido")
+        vistas = sorted(vistas, key=lambda fila: fila.get("last_watched_at") or "", reverse=True)
+
+        def completa(fila):
+            serie = fila.get("show") or {}
+            tid = (serie.get("ids") or {}).get("trakt")
+            if not tid:
+                return serie, None
+            try:
+                progreso = self._ok("GET", "/shows/%d/progress/watched" % tid)
+                if isinstance(progreso, dict) and all(isinstance(progreso.get(k), int)
+                                                      for k in ("aired", "completed")):
+                    return serie, progreso
+            except (OSError, ValueError, TraktError):
+                self.log("No se pudo obtener el progreso de una serie de Trakt")
+            return serie, None
+
+        # Los servidores que ignoren la paginación devuelven el historial entero.
+        if len(vistas) > limite:
+            comienzo = (pagina - 1) * limite
+            resultado = vistas[comienzo:comienzo + limite]
+            hay_mas = comienzo + limite < len(vistas)
+        else:
+            resultado = vistas
+            hay_mas = len(vistas) == limite
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            return list(pool.map(completa, resultado)), hay_mas
 
     def listas(self):
         """Listas personales: [(id, nombre, número de elementos)]"""

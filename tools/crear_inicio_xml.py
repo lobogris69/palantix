@@ -80,7 +80,7 @@ def fila(fid, forma, siguiente, anterior):
                 <visible>Integer.IsGreater(Container(%(id)d).NumItems,0)</visible>
             </control>
             <control type="list" id="%(id)d">
-                <width>1780</width><height>%(alto)d</height>
+                <width>1520</width><height>%(alto)d</height>
                 <orientation>horizontal</orientation>
                 <onleft>%(menu)d</onleft>
                 <scrolltime tween="cubic" easing="out">260</scrolltime>
@@ -105,7 +105,7 @@ def cartel(fid):
             <control type="image"><width>1920</width><height>1080</height><texture>degradado_izq.png</texture></control>
             <control type="image"><top>380</top><width>1920</width><height>700</height><texture>degradado_abajo.png</texture></control>
             <control type="grouplist">
-                <left>150</left><top>150</top><width>1100</width><height>400</height>
+                <left>400</left><top>150</top><width>1100</width><height>400</height>
                 <orientation>vertical</orientation><itemgap>4</itemgap><usecontrolcoords>true</usecontrolcoords>
                 <control type="label">
                     <width>1100</width><height>90</height>
@@ -154,41 +154,43 @@ def xml():
         </control>
         %(carteles)s
         <!-- logo -->
-        <control type="image"><left>150</left><top>52</top><width>64</width><height>64</height><texture>$INFO[Window.Property(logo)]</texture></control>
-        <control type="label"><left>230</left><top>58</top><width>500</width><height>54</height><font>font32_title</font><textcolor>FFFFFFFF</textcolor><label>[B]PALANTIX[/B]</label></control>
-        <control type="label"><left>470</left><top>64</top><width>600</width><height>46</height><font>font27</font><textcolor>%(acento)s</textcolor><label>$INFO[Window.Property(pestana),|   ,]</label></control>
-        <control type="label"><left>232</left><top>104</top><width>400</width><height>28</height><font>font10</font><textcolor>80FFFFFF</textcolor><label>$INFO[Window.Property(version),versión ,]</label></control>
+        <control type="image"><left>400</left><top>52</top><width>64</width><height>64</height><texture>$INFO[Window.Property(logo)]</texture></control>
+        <control type="label"><left>480</left><top>58</top><width>500</width><height>54</height><font>font32_title</font><textcolor>FFFFFFFF</textcolor><label>[B]PALANTIX[/B]</label></control>
+        <control type="label"><left>720</left><top>64</top><width>600</width><height>46</height><font>font27</font><textcolor>%(acento)s</textcolor><label>$INFO[Window.Property(pestana),|   ,]</label></control>
+        <control type="label"><left>482</left><top>104</top><width>400</width><height>28</height><font>font10</font><textcolor>80FFFFFF</textcolor><label>$INFO[Window.Property(version),versión ,]</label></control>
         <control type="label"><left>1400</left><top>58</top><width>460</width><height>54</height><align>right</align><font>font_clock</font><textcolor>FFFFFFFF</textcolor><label>$INFO[System.Time]</label></control>
         <!-- mensaje mientras carga -->
-        <control type="label"><left>150</left><top>620</top><width>1600</width><height>60</height><font>font27</font><textcolor>%(t2)s</textcolor>
+        <control type="label"><left>400</left><top>620</top><width>1460</width><height>60</height><font>font27</font><textcolor>%(t2)s</textcolor>
             <label>$INFO[Window.Property(estado)]</label><visible>!String.IsEmpty(Window.Property(estado))</visible></control>
         <!-- filas -->
         <control type="grouplist" id="9000">
-            <left>150</left><top>560</top><width>1780</width><height>520</height>
+            <left>400</left><top>560</top><width>1520</width><height>520</height>
             <orientation>vertical</orientation><itemgap>6</itemgap>
             <scrolltime tween="cubic" easing="out">320</scrolltime>
             <onleft>%(menu)d</onleft>
             %(filas)s
         </control>
-        <!-- menú lateral: iconos; al enfocarlo se despliega con nombres -->
+        <!-- menú lateral fijo -->
         <control type="group">
-            <control type="image"><width>110</width><height>1080</height><texture colordiffuse="CC08080C">blanco.png</texture>
-                <visible>!Control.HasFocus(%(menu)d)</visible></control>
-            <control type="image"><width>420</width><height>1080</height><texture colordiffuse="F208080C">blanco.png</texture>
-                <visible>Control.HasFocus(%(menu)d)</visible>
-                <animation effect="slide" start="-300,0" end="0,0" time="200" tween="cubic" easing="out">Visible</animation></control>
+            <control type="image"><width>365</width><height>1080</height><texture colordiffuse="FF131722">blanco.png</texture></control>
             <control type="list" id="%(menu)d">
-                <left>0</left><top>176</top><width>420</width><height>880</height>
+                <left>0</left><top>132</top><width>365</width><height>920</height>
                 <onright>9000</onright><orientation>vertical</orientation>
-                <itemlayout width="420" height="76">
-                    <control type="image"><left>33</left><top>18</top><width>44</width><height>44</height><texture colordiffuse="99FFFFFF">$INFO[ListItem.Icon]</texture></control>
+                <itemlayout width="365" height="68">
+                    <control type="image"><left>28</left><top>16</top><width>36</width><height>36</height><texture>$INFO[ListItem.Icon]</texture></control>
+                    <control type="label"><left>80</left><top>0</top><width>274</width><height>68</height><aligny>center</aligny><font>font27</font><textcolor>FFF1F4FA</textcolor>
+                        <label>$INFO[ListItem.Label]</label></control>
                 </itemlayout>
-                <focusedlayout width="420" height="76">
-                    <control type="image"><left>18</left><top>8</top><width>380</width><height>62</height><texture colordiffuse="%(acento)s" border="20">pildora.png</texture>
+                <focusedlayout width="365" height="68">
+                    <control type="image"><left>12</left><top>5</top><width>340</width><height>58</height><texture colordiffuse="FF254469" border="20">pildora.png</texture>
                         <visible>Control.HasFocus(%(menu)d)</visible></control>
-                    <control type="image"><left>33</left><top>18</top><width>44</width><height>44</height><texture>$INFO[ListItem.Icon]</texture></control>
-                    <control type="label"><left>100</left><top>8</top><width>290</width><height>62</height><aligny>center</aligny><font>font27</font><textcolor>FFFFFFFF</textcolor>
-                        <label>$INFO[ListItem.Label]</label><visible>Control.HasFocus(%(menu)d)</visible></control>
+                    <control type="image"><left>12</left><top>17</top><width>4</width><height>34</height><texture colordiffuse="%(acento)s">blanco.png</texture>
+                        <visible>Control.HasFocus(%(menu)d)</visible></control>
+                    <control type="image"><left>28</left><top>16</top><width>36</width><height>36</height><texture>$INFO[ListItem.Icon]</texture></control>
+                    <control type="label"><left>80</left><top>0</top><width>268</width><height>68</height><aligny>center</aligny><font>font27</font><textcolor>FFF1F4FA</textcolor>
+                        <label>$INFO[ListItem.Label]</label><visible>!Control.HasFocus(%(menu)d)</visible></control>
+                    <control type="label"><left>80</left><top>0</top><width>268</width><height>68</height><aligny>center</aligny><font>font27</font><textcolor>FFFFFFFF</textcolor>
+                        <label>[B]$INFO[ListItem.Label][/B]</label><visible>Control.HasFocus(%(menu)d)</visible></control>
                 </focusedlayout>
             </control>
         </control>
