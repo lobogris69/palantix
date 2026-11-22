@@ -127,6 +127,14 @@ class TMDB:
     def detalle(self, tmdb_id):
         return self._get("/movie/%s" % tmdb_id)
 
+    def elegir_juntos(self, generos, minutos):
+        return self._get("/discover/movie", sort_by="popularity.desc",
+                         with_genres=",".join(map(str, dict.fromkeys(generos))),
+                         **{"with_runtime.lte": minutos})
+
+    def donde_ver(self, tipo, tid):
+        return self._get("/%s/%s/watch/providers" % (tipo, tid)).get("results", {}).get(self.region, {})
+
     def imdb_id(self, tmdb_id, tipo="movie"):
         return self._get("/%s/%s/external_ids" % (tipo, tmdb_id)).get("imdb_id") or ""
 

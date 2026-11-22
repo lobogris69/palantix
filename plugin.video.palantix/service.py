@@ -222,10 +222,10 @@ def comprobar_fuentes():
     ajustes = addon.getSetting
     peliculas = ajustes("solo_peliculas_con_fuentes") == "true"
     episodios = ajustes("comprobar_fuentes_episodios") == "true"
-    if not (peliculas or episodios):
-        return
     perfil = xbmcvfs.translatePath(addon.getAddonInfo("profile"))
     cache = os.path.join(perfil, "cache")
+    if not os.path.isfile(os.path.join(cache, "disponibilidad.sqlite")):
+        return
     clave = tmdb.limpiar_clave(ajustes("tmdb_key"))
     idioma, region = tmdb.idioma_de(ajustes("idioma_cat") or 0)
     cliente = tmdb.TMDB(clave, idioma, region) if clave else None
@@ -244,6 +244,7 @@ def comprobar_fuentes():
         disponibilidad.comprobar_lote(cache, (proveedores, pref, "episodios"), consultar)
     if peliculas:
         disponibilidad.comprobar_lote(cache, (proveedores, pref), consultar)
+    disponibilidad.comprobar_lote(cache, (proveedores, pref, "descubrimiento"), consultar)
 
 
 def main():

@@ -34,7 +34,28 @@ A partir de ahí las versiones nuevas llegan solas.
 - Aviso en la tele cuando sale un capítulo nuevo (al arrancar y cada 6 h).
 - **Siguiente capítulo** automático con cuenta atrás al final (se puede cancelar).
 
+**Hoy para ti y reproducción**
+- **Hoy para ti** reúne la reanudación, el seguimiento, las favoritas con fuente
+  confirmada y la agenda deportiva. **Elegid algo para ver** recoge el género de
+  cada persona y una duración máxima con el mando y muestra hasta tres coincidencias
+  con fuente confirmada por el índice local.
+- Si un enlace falla antes de comenzar el vídeo, la selección manual vuelve a las
+  alternativas que ya encontró. El selector indica el formato cuando lo reconoce.
+- **Dónde ver** está en el menú contextual de cada película o serie. Muestra datos
+  regionales de JustWatch a través de TMDB y enlaza a la ficha de disponibilidad.
+- En el menú contextual de una serie se pueden guardar preferencias de audio y
+  subtítulos. Las descargas de subtítulos usan la cuenta de OpenSubtitles configurada.
+- **Copiar preferencias a otro Kodi → Conectar móvil en la red local** ofrece un
+  enlace temporal para exportar o enviar un archivo de preferencias sin credenciales.
+  Si está disponible pyqrcode con soporte PNG, también se muestra el QR. Confirma
+  cualquier importación en la tele.
+
 **Deportes**
+- La agenda agrupa **Hoy**, **Eventos en directo** y **Próximos eventos**. Una
+  lista JSON de deportes también puede usar el campo raíz `eventos`. Cada
+  entrada admite `inicio` y `fin` en ISO 8601, `canal` y
+  `resultado_en_titulo` para ocultar títulos con marcador. Para un evento
+  futuro se puede programar un aviso mientras Kodi esté abierto.
 - **Guía TV** muestra qué emite cada canal ahora y a continuación con los horarios
   de [EPG dobleM](https://github.com/davidmuma/EPG_dobleM). Pulsa el canal para verlo en directo.
   Las horas se muestran en la zona horaria de Kodi y la programación se guarda durante cuatro horas.

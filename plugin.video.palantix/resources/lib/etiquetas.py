@@ -91,3 +91,10 @@ def texto_etiquetas(a):
         partes.append("[%s]" % a["calidad"])
     partes += ["[%s]" % e for e in a["extras"] if e != "HEVC"]
     return " ".join(partes)
+
+
+def formato_video(url, etiqueta):
+    """Contenedor anunciado por el proveedor o visible en la ruta."""
+    patron = r"(?:\.|\b)(mkv|mp4|webm|m3u8|mpd|avi|mov|m4v)(?=\b)"
+    encontrado = re.search(patron, etiqueta + " " + unquote(url.split("?", 1)[0]), re.I)
+    return encontrado[1].upper() if encontrado else ""

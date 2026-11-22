@@ -22,6 +22,9 @@
         <setting id="mostrar_etiquetas" type="bool" label="Mostrar idioma y calidad en los títulos" default="true"/>
         <setting id="color_etiquetas" type="enum" label="Color de las etiquetas" values="Sin color|Dorado|Azul|Verde|Naranja|Violeta|Blanco" default="1"/>
     </category>
+    <category label="Deportes">
+        <setting id="deportes_sin_resultados" type="bool" label="Ocultar títulos marcados con resultado" default="true"/>
+    </category>
     <category label="Reproducción">
         <setting id="idioma_pref" type="enum" label="Idioma preferido (cuando no hay un orden personalizado)" values="Castellano|Latino|VOSE|Versión original|Me da igual" default="0"/>
         <setting id="orden_fuentes" type="enum" label="Orden de fuentes" values="Idioma primero|Calidad primero" default="0"/>
