@@ -17,7 +17,7 @@ FONDO = "FF0B0B10"
 TEXTO2 = "FFB8BCC8"
 
 # (id, forma): «ancha» = miniatura 16:9 con barra de progreso; «poster» = carátula 2:3
-FILAS = [(101, "ancha"), (102, "ancha"), (103, "poster"), (104, "poster"), (105, "poster"),
+FILAS = [(100, "ancha"), (101, "ancha"), (102, "ancha"), (103, "poster"), (104, "poster"), (105, "poster"),
          (106, "poster"), (107, "poster"), (108, "poster"), (109, "poster"), (110, "poster"), (111, "poster")]
 MENU = 200
 TAM = {"poster": (196, 294), "ancha": (352, 198)}
@@ -53,10 +53,14 @@ def capa_item(forma, enfocado, fid=0):
              '<control type="image"><width>110</width><height>34</height><texture colordiffuse="FF1DB954">pildora.png</texture></control>'
              '<control type="label"><width>110</width><height>34</height><align>center</align><aligny>center</aligny>'
              '<font>font10</font><textcolor>FFFFFFFF</textcolor><label>[B]NUEVO[/B]</label></control></control>' % (w - 104))
-    seguida = ('<control type="group"><left>15</left><top>20</top><visible>String.IsEqual(ListItem.Property(seguida),1)</visible>'
-               '<control type="image"><width>114</width><height>34</height><texture colordiffuse="FF2764A3">pildora.png</texture></control>'
-               '<control type="label"><width>114</width><height>34</height><align>center</align><aligny>center</aligny>'
-               '<font>font10</font><textcolor>FFFFFFFF</textcolor><label>[B]SIGUIENDO[/B]</label></control></control>')
+    seguida = ('<control type="group"><left>15</left><top>20</top><visible>!String.IsEmpty(ListItem.Property(seguida))</visible>'
+               '<control type="image"><width>165</width><height>34</height><texture colordiffuse="FF2764A3">pildora.png</texture></control>'
+               '<control type="label"><width>165</width><height>34</height><align>center</align><aligny>center</aligny>'
+               '<font>font10</font><textcolor>FFFFFFFF</textcolor><label>[B]$INFO[ListItem.Property(seguida)][/B]</label></control></control>')
+    a_medias = ('<control type="group"><left>15</left><top>20</top><visible>String.IsEqual(ListItem.Property(a_medias),1)</visible>'
+                '<control type="image"><width>114</width><height>34</height><texture colordiffuse="FF2764A3">pildora.png</texture></control>'
+                '<control type="label"><width>114</width><height>34</height><align>center</align><aligny>center</aligny>'
+                '<font>font10</font><textcolor>FFFFFFFF</textcolor><label>[B]A MEDIAS[/B]</label></control></control>')
     return ('<control type="group">%s%s'
             '<control type="image"><left>10</left><top>18</top><width>%d</width><height>%d</height>'
             '<texture colordiffuse="FF22242E">blanco.png</texture><visible>String.IsEmpty(%s)</visible></control>'
@@ -65,9 +69,9 @@ def capa_item(forma, enfocado, fid=0):
             '<label>$INFO[ListItem.Label]</label><visible>String.IsEmpty(%s)</visible></control>'
             '<control type="image"><left>10</left><top>18</top><width>%d</width><height>%d</height>'
             '<texture diffuse="%s" background="true">%s</texture><aspectratio>scale</aspectratio></control>'
-            '%s%s%s%s%s</control>' % (zoom, sombra, w, h, arte.replace("$INFO[", "").rstrip("]"),
+            '%s%s%s%s%s%s</control>' % (zoom, sombra, w, h, arte.replace("$INFO[", "").rstrip("]"),
                                     w - 20, h - 20, arte.replace("$INFO[", "").rstrip("]"),
-                                    w, h, mascara, arte, borde, progreso, nuevo, seguida, titulo))
+                                    w, h, mascara, arte, borde, progreso, nuevo, seguida, a_medias, titulo))
 
 
 def fila(fid, forma, siguiente, anterior):
@@ -177,11 +181,15 @@ def xml():
                 <left>0</left><top>103</top><width>365</width><height>952</height>
                 <onright>9000</onright><orientation>vertical</orientation>
                 <itemlayout width="365" height="68">
+                    <control type="image"><left>12</left><top>5</top><width>340</width><height>58</height><texture colordiffuse="FF1C2A40" border="20">pildora.png</texture>
+                        <visible>String.IsEqual(ListItem.Property(activa),1)</visible></control>
                     <control type="image"><left>28</left><top>16</top><width>36</width><height>36</height><texture>$INFO[ListItem.Icon]</texture></control>
                     <control type="label"><left>80</left><top>0</top><width>274</width><height>68</height><aligny>center</aligny><font>font27</font><textcolor>FFF1F4FA</textcolor>
                         <label>$INFO[ListItem.Label]</label></control>
                 </itemlayout>
                 <focusedlayout width="365" height="68">
+                    <control type="image"><left>12</left><top>5</top><width>340</width><height>58</height><texture colordiffuse="FF1C2A40" border="20">pildora.png</texture>
+                        <visible>!Control.HasFocus(%(menu)d) + String.IsEqual(ListItem.Property(activa),1)</visible></control>
                     <control type="image"><left>12</left><top>5</top><width>340</width><height>58</height><texture colordiffuse="FF254469" border="20">pildora.png</texture>
                         <visible>Control.HasFocus(%(menu)d)</visible></control>
                     <control type="image"><left>12</left><top>17</top><width>4</width><height>34</height><texture colordiffuse="%(acento)s">blanco.png</texture>

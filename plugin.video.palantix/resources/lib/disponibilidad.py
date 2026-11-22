@@ -30,7 +30,7 @@ def _abrir(carpeta):
         db.close()
 
 
-def filtrar(peliculas, carpeta, configuracion):
+def filtrar(peliculas, carpeta, configuracion, ids_pendientes=None):
     """Devuelve títulos ya confirmados y si queda trabajo por hacer."""
     if not peliculas:
         return [], False
@@ -52,6 +52,8 @@ def filtrar(peliculas, carpeta, configuracion):
         if pendientes:
             db.executemany("INSERT OR IGNORE INTO pendientes VALUES (?, ?, ?, ?)", pendientes)
 
+    if ids_pendientes is not None:
+        ids_pendientes.update(i for _, i, _, _ in pendientes)
     visibles = []
     for peli in peliculas:
         disponible, caduca = guardadas.get(str(peli["id"]), (0, 0))

@@ -127,6 +127,9 @@ class TMDB:
     def detalle(self, tmdb_id):
         return self._get("/movie/%s" % tmdb_id)
 
+    def explorar(self, tipo, opciones):
+        return self._get("/discover/" + tipo, **opciones)
+
     def elegir_juntos(self, generos, minutos):
         return self._get("/discover/movie", sort_by="popularity.desc",
                          with_genres=",".join(map(str, dict.fromkeys(generos))),

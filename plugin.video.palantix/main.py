@@ -13,7 +13,7 @@ import xbmcgui
 import xbmcplugin
 import xbmcvfs
 
-from resources.lib import ajustes_serie, deportes, disponibilidad, epg, etiquetas, fuentes_catalogo, listas, preferencias_copia
+from resources.lib import ajustes_serie, deportes, disponibilidad, epg, etiquetas, explorar, fuentes_catalogo, listas, preferencias_copia
 from resources.lib import actualizar, debrid, inicio, mislistas, novedades, progreso, seguimiento, subtitulos, trakt
 from resources.lib import tmdb as tmdb_mod
 from resources.lib.providers import Peli
@@ -587,7 +587,7 @@ def menu_peliculas():
     carpeta("Populares", url(accion="populares"))
     carpeta("Novedades en streaming", url(accion="novedades_streaming"))
     carpeta("Mejor valoradas", url(accion="mejor_valoradas"))
-    carpeta("Géneros", url(accion="generos"))
+    carpeta("Géneros", url(accion="explorar_generos", tipo="movie"))
     carpeta("Por año", url(accion="anios", destino="anio"))
     carpeta("Sagas", url(accion="sagas"))
     carpeta("Buscar película", url(accion="buscar"), "DefaultAddonsSearch.png")
@@ -599,10 +599,114 @@ def menu_series():
     carpeta("Tendencias de la semana", url(accion="s_tendencias"))
     carpeta("Populares", url(accion="s_populares"))
     carpeta("Mejor valoradas", url(accion="s_mejor_valoradas"))
-    carpeta("Géneros", url(accion="s_generos"))
+    carpeta("Géneros", url(accion="explorar_generos", tipo="tv"))
     carpeta("Por año", url(accion="anios", destino="s_anio"))
     carpeta("Buscar serie", url(accion="s_buscar"), "DefaultAddonsSearch.png")
     xbmcplugin.endOfDirectory(HANDLE)
+
+
+def explorar_generos(t):
+    tipo = "tv" if PARAMS.get("tipo") == "tv" else "movie"
+    generos = t.s_generos() if tipo == "tv" else t.generos()
+    carpeta("Todos los géneros", url(accion="explorar", tipo=tipo))
+    for genero in generos:
+        carpeta(genero["name"], url(accion="explorar", tipo=tipo, gid=genero["id"], genero=genero["name"]))
+    return fin_listado()
+
+
+def explorar_catalogo(t, pagina):
+    tipo = "tv" if PARAMS.get("tipo") == "tv" else "movie"
+    gid = PARAMS.get("gid", "")
+    genero = PARAMS.get("genero") or "Todos los géneros"
+    filtros = explorar.filtros(PARAMS)
+    comunes = dict(tipo=tipo, gid=gid, genero=genero, **filtros)
+    campos = [("orden", "Orden", explorar.ORDENES)]
+    if tipo == "movie":
+        campos += [("duracion", "Duración", explorar.DURACIONES), ("fuente", "Disponibilidad", explorar.FUENTES)]
+    else:
+        campos.append(("estado", "Estado", explorar.ESTADOS))
+    valores = [opciones[filtros[clave]] for clave, _, opciones in campos]
+    carpeta("Filtros · " + " · ".join([genero] + valores),
+            url(accion="explorar_filtros", **comunes), "DefaultAddonService.png")
+    if filtros != explorar.filtros({}):
+        carpeta("Quitar filtros", url(accion="explorar", tipo=tipo, gid=gid, genero=genero))
+
+    try:
+        if tipo == "tv" and filtros["estado"] == "seguimiento":
+            datos = explorar.seguidas(t, CACHE, mis_series(), gid, filtros["orden"], pagina)
+            guardados = False
+        else:
+            datos, guardados = explorar.cargar(t, CACHE, tipo, explorar.consulta(tipo, gid, filtros, pagina))
+    except (OSError, ValueError, sqlite3.Error):
+        aviso("No se pudo cargar este género")
+        return fin_listado()
+    if guardados:
+        aviso("Mostrando los últimos resultados guardados")
+    filas = datos.get("results", [])
+    confirmadas, pendientes = set(), set()
+    if tipo == "movie":
+        _, proveedores = consulta_fuentes(None)
+        resultados, _ = disponibilidad.filtrar(filas, CACHE, (proveedores, preferencias(), "descubrimiento"),
+                                               ids_pendientes=pendientes)
+        confirmadas = {str(f["id"]) for f in resultados}
+        if filtros["fuente"] == "confirmadas":
+            filas = resultados
+        elif filtros["fuente"] == "pendientes":
+            filas = [f for f in filas if str(f["id"]) in pendientes and str(f["id"]) not in confirmadas]
+    for ficha in filas:
+        _, li, _ = ficha_serie(ficha) if tipo == "tv" else ficha_pelicula(ficha)
+        tid = str(ficha["id"])
+        if tipo == "movie":
+            estado = ("Con fuente confirmada" if tid in confirmadas else
+                      "Por comprobar" if tid in pendientes else "Sin fuente confirmada")
+            li.setLabel(li.getLabel() + " · " + estado)
+        li.setProperty("IsPlayable", "false")
+        xbmcplugin.addDirectoryItem(HANDLE, url(accion="explorar_ficha", tipo=tipo, id=tid), li, True)
+    if pagina < min(datos.get("total_pages", 1), 500):
+        carpeta("Página siguiente", url(accion="explorar", page=pagina + 1, **comunes))
+    if not filas:
+        aviso("No hay resultados con estos filtros en esta página")
+    return fin_listado()
+
+
+def explorar_filtros():
+    tipo = "tv" if PARAMS.get("tipo") == "tv" else "movie"
+    campos = [("orden", "Orden", explorar.ORDENES)]
+    if tipo == "movie":
+        campos += [("duracion", "Duración", explorar.DURACIONES), ("fuente", "Disponibilidad", explorar.FUENTES)]
+    else:
+        campos.append(("estado", "Estado", explorar.ESTADOS))
+    filtros = explorar.filtros(PARAMS)
+    dialogo = xbmcgui.Dialog()
+    for clave, titulo, opciones in campos:
+        claves = list(opciones)
+        n = dialogo.select(titulo, list(opciones.values()), preselect=claves.index(filtros[clave]))
+        if n < 0:
+            return fin_listado()
+        filtros[clave] = claves[n]
+    destino = url(accion="explorar", tipo=tipo, gid=PARAMS.get("gid", ""),
+                  genero=PARAMS.get("genero", ""), **filtros)
+    xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+    xbmc.executebuiltin("Container.Update(%s,replace)" % destino)
+
+
+def explorar_ficha(t):
+    tipo = "tv" if PARAMS.get("tipo") == "tv" else "movie"
+    tid = int(PARAMS["id"])
+    datos = t.serie(tid) if tipo == "tv" else t.detalle(tid)
+    destino, li, carpeta_ficha = ficha_serie(datos) if tipo == "tv" else ficha_pelicula(datos)
+    tag = li.getVideoInfoTag()
+    generos = " · ".join(g["name"] for g in datos.get("genres", []))
+    duracion = datos.get("runtime") or next(iter(datos.get("episode_run_time") or []), 0)
+    siguiente = (mis_novedades().get(str(tid)) or {}).get("siguiente") if tipo == "tv" else None
+    detalle = [generos, "%d min" % duracion if duracion else ""]
+    if siguiente:
+        detalle.append("Siguiente: %dx%02d · %s" % (siguiente["s"], siguiente["e"], siguiente["nombre"]))
+    tag.setPlot("\n".join(filter(None, (*detalle, datos.get("overview", "")))))
+    li.setLabel("Ver temporadas · " + li.getLabel() if tipo == "tv" else "Reproducir · " + li.getLabel())
+    xbmcplugin.addDirectoryItem(HANDLE, destino, li, carpeta_ficha)
+    carpeta("Dónde ver", url(accion="donde_ver", tipo=tipo, id=tid))
+    return fin_listado("tvshows" if tipo == "tv" else "movies")
 
 
 def generos(lista, accion):
@@ -1853,6 +1957,7 @@ SIN_TMDB = {
     "trakt": menu_trakt,
     "ajustes_serie": configurar_serie,
     "hoy_para_ti": hoy_para_ti,
+    "explorar_filtros": explorar_filtros,
     "favoritas_disponibles": favoritas_disponibles,
     "oferta_streaming": oferta_streaming,
     "trakt_progreso": trakt_progreso_series,
@@ -1894,6 +1999,12 @@ def con_tmdb(t, accion, page):
         listar(t.saga(PARAMS["id"]), "saga", id=PARAMS["id"])
     elif accion == "elegir_juntos":
         elegir_juntos(t)
+    elif accion == "explorar_generos":
+        explorar_generos(t)
+    elif accion == "explorar":
+        explorar_catalogo(t, page)
+    elif accion == "explorar_ficha":
+        explorar_ficha(t)
     elif accion == "donde_ver":
         donde_ver(t)
     elif accion == "seguir":
