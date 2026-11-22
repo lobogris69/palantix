@@ -117,6 +117,16 @@ guion[:] = [(200, [{"type": "movie", "movie": {"title": "A", "year": 2001, "ids"
                    {"type": "person", "person": {}}])]
 comprobar("trakt: elementos de una lista personal", tk.lista(5) == [("pelicula", 1, "A", 2001), ("serie", 2, "S", 2010)])
 
+guion[:] = [(201, {}), (200, {})]
+tk.marcar_visto({"tipo": "episodio", "tmdb": 1399, "s": 2, "e": 5}, False)
+comprobar("trakt: quitar visto sincroniza serie, temporada y episodio",
+          vistas_t[-1] == ("POST", "/sync/history/remove",
+                          {"shows": [{"ids": {"tmdb": 1399},
+                                      "seasons": [{"number": 2, "episodes": [{"number": 5}]}]}]}))
+tk.cambiar_pendiente("shows", 1399, True)
+comprobar("trakt: añadir una serie a pendientes usa su id de TMDB",
+          vistas_t[-1] == ("POST", "/sync/watchlist", {"shows": [{"ids": {"tmdb": 1399}}]}))
+
 # gancho: scrobble al empezar y parar, y nota al terminar
 aj2 = Aj(trakt_client_id="C", trakt_client_secret="S", trakt_token="T", trakt_activo="true", trakt_valorar="2")
 notas = []
@@ -136,6 +146,15 @@ g.al_empezar(meta, None)
 g.al_avanzar(meta, None, 1000, 5000)
 g.al_parar(meta, None, False)
 comprobar("trakt gancho: al 20 % no pregunta nota", llamadas == [("start", 0), ("stop", 20)] and notas == [])
+llamadas.clear()
+aj2.set("trakt_activo", "false")
+g.al_empezar(meta, None)
+g.al_parar(meta, None, True)
+comprobar("trakt desactivado no envía reproducciones", not llamadas)
+aj2.set("trakt_activo", "true")
+g.al_empezar(meta, None)
+g.al_parar(meta, None, True)
+comprobar("trakt recién activado funciona sin reiniciar el servicio", llamadas == [("start", 0), ("stop", 100)])
 comprobar("trakt: «a veces» pregunta 1 de cada 3", trakt.toca_preguntar(1, lambda: 0.1) and not trakt.toca_preguntar(1, lambda: 0.9))
 
 try:
@@ -214,7 +233,7 @@ comprobar("inicio: «Continuar viendo» con la peli a medias y la serie sin nove
           [e["label"] for e in filas[101]] == ["Nosferatu", "Otra"] and filas[101][0]["resume"] == (1200, 5640))
 comprobar("inicio: «Nuevos capítulos» con la serie que tiene NUEVO", [e["label"] for e in filas[102]] == ["Ficción"]
           and filas[102][0]["nuevo"] == "1" and "e=2" in filas[102][0]["url"])
-comprobar("inicio: filas del catálogo con 20 carátulas cada una", all(len(filas[f]) == 20 for f in (103, 104, 105, 106)))
+comprobar("inicio: filas del catálogo con 20 carátulas cada una", all(len(filas[f]) == 20 for f in (103, 104, 106)) and 105 not in filas)
 comprobar("inicio: película = reproducir, serie = abrir temporadas",
           filas[103][0]["tipo"] == "reproducir" and "accion=reproducir" in filas[103][0]["url"]
           and filas[104][0]["tipo"] == "carpeta" and "accion=temporadas" in filas[104][0]["url"])
@@ -244,7 +263,7 @@ class TPestanas(TFalso):
 
 PP = tempfile.mkdtemp(prefix="palantix_pestanas_")
 pel = inicio.datos_pestana(PP, TPestanas(), url, "peliculas")
-comprobar("pestaña Películas: 8 filas (de la 103 a la 110) con 20 carátulas", sorted(pel) == list(range(103, 111))
+comprobar("pestaña Películas: 7 filas y ninguna de cine", sorted(pel) == [103, 104, 106, 107, 108, 109, 110]
           and all(len(v) == 20 for v in pel.values()))
 comprobar("pestaña Películas: la fila Terror pide el género 27 y reproduce", pel[109][0]["label"] == "Peli %d" % (6000 + 27)
           and pel[109][0]["tipo"] == "reproducir")

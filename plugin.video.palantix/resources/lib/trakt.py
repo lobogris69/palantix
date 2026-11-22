@@ -145,6 +145,21 @@ class Trakt:
             cuerpo = {"movies": [{"ids": {"tmdb": int(meta["tmdb"])}, "rating": int(nota)}]}
         return self._ok("POST", "/sync/ratings", cuerpo)
 
+    def marcar_visto(self, meta, visto):
+        contenido = self._cuerpo(meta)
+        if meta.get("tipo") == "episodio":
+            episodio = contenido["episode"]
+            cuerpo = {"shows": [dict(contenido["show"], seasons=[
+                {"number": episodio["season"], "episodes": [{"number": episodio["number"]}]}
+            ])]}
+        else:
+            cuerpo = {"movies": [contenido["movie"]]}
+        return self._ok("POST", "/sync/history" + ("" if visto else "/remove"), cuerpo)
+
+    def cambiar_pendiente(self, tipo, tmdb_id, poner):
+        return self._ok("POST", "/sync/watchlist" + ("" if poner else "/remove"),
+                        {tipo: [{"ids": {"tmdb": int(tmdb_id)}}]})
+
     def pendientes(self, tipo):
         """Lista de pendientes: tipo 'movies' o 'shows' -> [(tmdb_id, titulo, anio)]"""
         clave = "movie" if tipo == "movies" else "show"
@@ -194,18 +209,18 @@ class TraktGancho:
         self.preguntar = preguntar or self._preguntar_kodi
         self.pct = 0.0
 
-    def activo(self):
-        return self.t.encendido()
-
     def al_empezar(self, meta, reproductor):
         self.pct = 0.0
-        self._seguro("start", meta, 0.1)
+        if self.t.encendido():
+            self._seguro("start", meta, 0.1)
 
     def al_avanzar(self, meta, reproductor, actual, total):
         if total > 0:
             self.pct = 100.0 * actual / total
 
     def al_parar(self, meta, reproductor, terminado):
+        if not self.t.encendido():
+            return
         pct = 100.0 if terminado else self.pct
         self._seguro("stop", meta, pct)
         try:
