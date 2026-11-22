@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from . import novedades, progreso, seguimiento
 from .tmdb import TMDB
+from .explorar import GEN_DESTACADOS
 from .providers.cine_libre import TITULO as TITULO_CINE_LIBRE
 
 FILAS = [
@@ -22,7 +23,7 @@ FILAS = [
     (108, "Novedades en streaming"),
     (111, "Capítulos recientes"),
 ]
-TODAS = list(range(101, 112))  # ids de las filas del XML (101-102 anchas, 103-111 carátulas)
+TODAS = list(range(100, 112))  # ids de las filas del XML (101-102 anchas, 103-111 carátulas)
 
 # Pestañas: (fila, título, (qué pedir a TMDB, argumento))
 PESTANAS = {
@@ -71,9 +72,11 @@ def elemento_pelicula(m, url):
 def elemento_serie(s, url, seguidas=(), nov=None):
     sid = str(s["id"])
     estado = (nov or {}).get(sid) or {}
-    marca = "● NUEVO CAPÍTULO" if estado.get("nuevo") else "EN SEGUIMIENTO" if sid in seguidas else ""
+    marca = "● NUEVO CAPÍTULO" if estado.get("nuevo") else ""
+    if not marca and sid in seguidas:
+        marca = "AL DÍA" if estado and not estado.get("pendientes") else "EN SEGUIMIENTO"
     return {"destacado": marca, "nuevo": "1" if estado.get("nuevo") else "",
-            "seguida": "1" if sid in seguidas and not estado.get("nuevo") else "", "label": s.get("name") or s.get("original_name") or "?", "plot": s.get("overview", ""),
+            "seguida": marca if not estado.get("nuevo") else "", "label": s.get("name") or s.get("original_name") or "?", "plot": s.get("overview", ""),
             "poster": _img(s.get("poster_path")), "fanart": _img(s.get("backdrop_path"), "w1280"),
             "thumb": _img(s.get("backdrop_path"), "w780"),
             "info": _info(_anio(s.get("first_air_date")), _nota(s.get("vote_average")), "Serie"),
@@ -161,7 +164,17 @@ def datos_pestana(perfil, t, url, pestana, filtrar_peliculas=lambda pelis: pelis
 def titulos(pestana):
     if pestana == "inicio":
         return dict(FILAS)
-    return {fid: titulo for fid, titulo, _ in PESTANAS[pestana]}
+    return {100: "Explorar géneros", **{fid: titulo for fid, titulo, _ in PESTANAS[pestana]}}
+
+
+def accesos_generos(pestana, url, logo):
+    tipo = "tv" if pestana == "series" else "movie"
+    opciones = [{"label": titulo, "label2": titulo, "thumb": logo, "tipo": "carpeta",
+                 "url": url(accion="explorar", tipo=tipo, gid=gid, genero=titulo)}
+                for gid, titulo in GEN_DESTACADOS[tipo]]
+    opciones.append({"label": "Todos los géneros", "label2": "Todos los géneros", "thumb": logo,
+                     "tipo": "carpeta", "url": url(accion="explorar_generos", tipo=tipo)})
+    return opciones
 
 
 def datos_filas(perfil, t, url, favoritas=(), filtrar_peliculas=lambda pelis: pelis):
@@ -185,7 +198,7 @@ def datos_filas(perfil, t, url, favoritas=(), filtrar_peliculas=lambda pelis: pe
             "poster": _img(d.get("poster")), "fanart": _img(d.get("fanart"), "w1280"), "thumb": _img(d.get("fanart"), "w780"),
             "plot": "Te quedaste en el %s." % progreso.hhmmss(d["pos"]),
             "info": _info(str(d.get("anio") or ""), "Película", "%d %%" % (100 * d["pos"] // max(1, d["total"]))),
-            "resume": (d["pos"], d["total"]), "tipo": "reproducir",
+            "resume": (d["pos"], d["total"]), "destacado": "A MEDIAS", "a_medias": "1", "tipo": "reproducir",
             "url": url(accion="reproducir", id=d["tmdb"], titulo=d["titulo"], original=d.get("original", ""),
                        anio=d.get("anio", ""), poster=d.get("poster", ""), fondo=d.get("fanart", ""))})
     for sid, d in seguimiento.ordenadas(perfil):
@@ -253,7 +266,7 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
         tag.setPlot(e.get("plot", ""))
         if e.get("resume"):
             tag.setResumePoint(float(e["resume"][0]), float(e["resume"][1]))
-        for k in ("info", "destacado", "nuevo", "seguida", "tipo", "url"):
+        for k in ("info", "destacado", "nuevo", "seguida", "a_medias", "tipo", "url"):
             item.setProperty(k, e.get(k, ""))
         return item
 
@@ -280,9 +293,11 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
             """Rellena las filas con la pestaña pedida (Inicio, Películas o Series) sin salir de la pantalla."""
             self.pestana = pestana
             self.setProperty("pestana", NOMBRE_PESTANA[pestana])
-            for fid in TODAS:
-                self.getControl(fid).reset()
-                self.clearProperty("fila%d" % fid)
+            menu_lateral = self.getControl(200)
+            for i in range(menu_lateral.size()):
+                opcion = menu_lateral.getListItem(i)
+                activa = opcion.getProperty("tipo") == "pestana" and opcion.getProperty("url") == pestana
+                opcion.setProperty("activa", "1" if activa else "")
             self.setProperty("estado", "Cargando...")
             try:
                 if pestana == "inicio":
@@ -295,6 +310,11 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
                 log("Pestaña %s: %s" % (pestana, e))
                 filas = {}
             self.clearProperty("estado")
+            if pestana != "inicio" and t:
+                filas[100] = accesos_generos(pestana, url, logo)
+            for fid in TODAS:
+                self.getControl(fid).reset()
+                self.clearProperty("fila%d" % fid)
             primera = None
             for fid, titulo in sorted(titulos(pestana).items()):
                 elementos = filas.get(fid, [])
