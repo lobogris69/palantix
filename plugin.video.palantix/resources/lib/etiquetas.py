@@ -7,11 +7,16 @@ import re
 from urllib.parse import unquote
 
 _LAT = re.compile(r"latino|\blatin\b|\blat\b|latam|hispanoamerica", re.I)
-_CAST = re.compile(r"castellano|\bcast\b|\besp\b|\bspa\b|espa[ñn]ol|spanish", re.I)
+_CAST = re.compile(r"castellano|\bcast\b|\besp\b|\bspa\b|espa[ñn]ol|spanish|\(es\)|\[es\]", re.I)
+_CAST_EXPLICITO = re.compile(r"castellano|\bcast\b|\bes[-_]es\b", re.I)
 _VOSE = re.compile(r"\bvose\b|\bvos\b|subtitulad|\bsubs?[ ._-]?esp", re.I)
 _DUAL = re.compile(r"\bdual\b", re.I)
 _MULTI = re.compile(r"\bmulti\b", re.I)
 _VO = re.compile(r"\bvo\b|\benglish\b|\beng\b", re.I)
+_NOMBRES_IDIOMA = {"LAT": "Latino", "CAST": "Castellano", "VOSE": "VOSE",
+                   "VO": "Versión original", "DUAL": "Audio dual", "MULTI": "Multiaudio"}
+_TAMANO = re.compile(r"(?<!\w)([0-9]+(?:[.,][0-9]+)?)\s*(GiB|MiB|TiB|GB|MB|TB)\b", re.I)
+_UNIDADES = {"gib": "GiB", "mib": "MiB", "tib": "TiB"}
 
 _CALIDAD = [
     ("4K", re.compile(r"2160p|\b4k\b|\buhd\b", re.I)),
@@ -37,7 +42,8 @@ def analizar(*textos):
     if _LAT.search(t):
         idiomas.append("LAT")
     # «Spanish»/«Español» sin más suele ser castellano; si ya pone latino, no lo duplicamos
-    if _CAST.search(_LAT.sub(" ", t)) and not (idiomas and not re.search(r"castellano|\bcast\b", t, re.I)):
+    castellano = _CAST_EXPLICITO.search(t)
+    if castellano or (_CAST.search(_LAT.sub(" ", t)) and not idiomas):
         idiomas.append("CAST")
     for etiqueta, rx in (("VOSE", _VOSE), ("DUAL", _DUAL), ("MULTI", _MULTI), ("VO", _VO)):
         if rx.search(t):
@@ -91,6 +97,17 @@ def texto_etiquetas(a):
         partes.append("[%s]" % a["calidad"])
     partes += ["[%s]" % e for e in a["extras"] if e != "HEVC"]
     return " ".join(partes)
+
+
+def resumen_fuente(fuente, analisis):
+    """Datos breves para la primera línea del selector de Kodi."""
+    texto = unquote(" ".join((fuente.idioma, fuente.etiqueta, fuente.url.rsplit("/", 1)[-1])))
+    idiomas = ["Español" if i == "CAST" and not _CAST_EXPLICITO.search(texto) else _NOMBRES_IDIOMA[i]
+               for i in analisis["idiomas"]]
+    tamano = _TAMANO.search(fuente.etiqueta)
+    peso = "%s %s" % (tamano[1], _UNIDADES.get(tamano[2].lower(), tamano[2].upper())) if tamano else ""
+    audio = " / ".join(idiomas) or "Idioma sin indicar"
+    return " · ".join(filter(None, (audio, analisis["calidad"], formato_video(fuente.url, fuente.etiqueta), peso)))
 
 
 def formato_video(url, etiqueta):
