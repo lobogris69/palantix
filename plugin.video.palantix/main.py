@@ -1,4 +1,5 @@
 """Punto de entrada del addon. Kodi lo llama con: sys.argv = [url_base, handle, '?parametros']."""
+from hashlib import sha256
 import json
 import os
 import sqlite3
@@ -13,7 +14,7 @@ import xbmcgui
 import xbmcplugin
 import xbmcvfs
 
-from resources.lib import ajustes_serie, deportes, disponibilidad, epg, etiquetas, explorar, fuentes_catalogo, listas, preferencias_copia
+from resources.lib import ajustes_serie, avisos_fuentes, deportes, disponibilidad, epg, etiquetas, explorar, fuentes_catalogo, listas, preferencias_copia
 from resources.lib import actualizar, debrid, inicio, mislistas, novedades, progreso, seguimiento, subtitulos, trakt
 from resources.lib import tmdb as tmdb_mod
 from resources.lib.providers import Peli
@@ -352,6 +353,36 @@ def _arte(d):
     }
 
 
+def accion_aviso_fuente(li, ficha):
+    li.addContextMenuItems([("Avísame cuando tenga fuente", "RunPlugin(%s)" %
+                            url(accion="aviso_fuente", ficha=json.dumps(ficha, ensure_ascii=False)))])
+
+
+def guardar_aviso_fuente():
+    ficha = json.loads(PARAMS["ficha"])
+    avisos_fuentes.guardar(PERFIL, ficha)
+    aviso("Te avisaremos cuando se confirme una fuente")
+
+
+def lista_avisos_fuentes():
+    items = avisos_fuentes.leer(PERFIL)
+    if not items:
+        aviso("Activa un aviso desde el menú contextual de una película o capítulo")
+    for ficha, disponible in items:
+        li = xbmcgui.ListItem("%s · %s" % (ficha["title"], "Fuente confirmada" if disponible else "Por comprobar"))
+        li.setProperty("IsPlayable", "true")
+        li.addContextMenuItems([("Quitar aviso", "RunPlugin(%s)" % url(accion="quitar_aviso_fuente", id=ficha["id"]))])
+        extra = {"tipo": "episodio", "s": ficha["temporada"], "e": ficha["episodio"]} if "episodio" in ficha else {}
+        xbmcplugin.addDirectoryItem(HANDLE, url(accion="reproducir", id=ficha["tmdb_id"], titulo=ficha["title"],
+                                                original=ficha.get("original_title", ""), elegir=1, **extra), li, False)
+    return fin_listado()
+
+
+def quitar_aviso_fuente():
+    avisos_fuentes.quitar(PERFIL, PARAMS["id"])
+    xbmc.executebuiltin("Container.Refresh")
+
+
 def accion_donde_ver(li, tipo, tid):
     li.addContextMenuItems([("Dónde ver", "Container.Update(%s)" %
                             url(accion="donde_ver", tipo=tipo, id=tid))])
@@ -425,6 +456,8 @@ def ficha_pelicula(m):
     ])
     acciones_trakt(li, "movies", m["id"])
     accion_donde_ver(li, "movie", m["id"])
+    accion_aviso_fuente(li, {"id": str(m["id"]), "tmdb_id": m["id"], "title": titulo,
+                            "original_title": m.get("original_title") or "", "release_date": anio})
     destino = url(accion="reproducir", id=m["id"], titulo=titulo,
                   original=m.get("original_title", ""), anio=anio)
     return destino, li, False
@@ -539,6 +572,7 @@ def menu():
 def hoy_para_ti():
     carpeta("Continuar películas", url(accion="a_medias"))
     carpeta("Series y próximos capítulos", url(accion="seguir"), "DefaultTVShows.png")
+    carpeta("Avisos de disponibilidad", url(accion="lista_avisos_fuentes"))
     carpeta("Ya disponible en tu lista", url(accion="favoritas_disponibles"), "DefaultFavourites.png")
     carpeta("Deportes hoy", url(accion="deportes_hoy"))
     carpeta("Elegid algo para ver", url(accion="elegir_juntos"), "DefaultMovies.png")
@@ -1084,7 +1118,9 @@ def capitulos(t):
         emitido = ep.get("air_date") or ""
         n_s, n_e = ep["season_number"], ep["episode_number"]
         visto = seguimiento.esta_visto(seg, n_s, n_e)
-        nombre = "%dx%02d. %s" % (n_s, n_e, ep.get("name") or "")
+        spoiler = ADDON.getSetting("series_sin_destripes") == "true" and not visto
+        titulo_episodio = "Episodio %d" % n_e if spoiler else ep.get("name") or ""
+        nombre = "%dx%02d. %s" % (n_s, n_e, titulo_episodio)
         if not emitido or emitido > hoy:
             nombre = color("%s (sale el %s)" % (nombre, fecha_es(emitido) or "?"), GRIS)
         elif seg and not visto and emitido > visto_dia:
@@ -1094,15 +1130,15 @@ def capitulos(t):
         elif (n_s, n_e) in confirmados:
             nombre += "  " + color("Con fuente", VERDE)
         li = xbmcgui.ListItem(nombre)
-        li.setArt({"thumb": tmdb_mod.TMDB.imagen(ep.get("still_path"), "w300"),
+        li.setArt({"thumb": tmdb_mod.TMDB.imagen(ep.get("still_path"), "w300") if not spoiler else "",
                    "poster": tmdb_mod.TMDB.imagen(temp.get("poster_path"))})
         tag = li.getVideoInfoTag()
         tag.setMediaType("episode")
-        tag.setTitle(ep.get("name") or "")
+        tag.setTitle(titulo_episodio)
         tag.setTvShowTitle(serie)
         tag.setSeason(n_s)
         tag.setEpisode(n_e)
-        tag.setPlot(ep.get("overview") or "")
+        tag.setPlot("" if spoiler else ep.get("overview") or "")
         tag.setFirstAired(emitido)
         if ep.get("runtime"):
             tag.setDuration(int(ep["runtime"]) * 60)
@@ -1111,6 +1147,7 @@ def capitulos(t):
         prog = mi_progreso().get("e:%s:%s:%s" % (PARAMS["id"], n_s, n_e))
         if prog:
             tag.setResumePoint(float(prog["pos"]), float(prog["total"]))
+            li.setLabel(li.getLabel() + " · A medias")
         li.setProperty("IsPlayable", "true")
         destino = url(accion="reproducir", tipo="episodio", id=PARAMS["id"], titulo=serie,
                       original=PARAMS.get("original", ""), anio=PARAMS.get("anio", ""), s=n_s, e=n_e,
@@ -1122,6 +1159,9 @@ def capitulos(t):
                          titulo=serie, original=PARAMS.get("original", ""), anio=PARAMS.get("anio", ""),
                          poster=PARAMS.get("poster", ""), fondo=PARAMS.get("fondo", ""))
             acciones.append((cambio, "RunPlugin(%s)" % accion))
+            accion_aviso_fuente(li, {"id": "%s:%d:%d" % (PARAMS["id"], n_s, n_e), "tmdb_id": int(PARAMS["id"]),
+                                    "title": serie, "original_title": PARAMS.get("original") or "",
+                                    "temporada": n_s, "episodio": n_e})
         li.addContextMenuItems(acciones)
         xbmcplugin.addDirectoryItem(HANDLE, destino, li, False)
     fin_listado("episodes")
@@ -1184,6 +1224,8 @@ def menu_deportes():
     carpeta("Detener reproducción", url(accion="deportes_detener"))
     carpeta("Canales en directo", url(accion="deportes_canales"), "DefaultTVShows.png")
     carpeta("Guía TV", url(accion="deportes_epg"), "DefaultTVShows.png")
+    if xbmc.getCondVisibility("System.AddonIsEnabled(pvr.iptvsimple)"):
+        carpeta("Cuadrícula de canales de Kodi", url(accion="deportes_cuadricula"), "DefaultTVShows.png")
     reproductor = complemento_ace_stream()
     if reproductor and reproductor.getAddonInfo("name").casefold() == "ekhorus":
         carpeta("Canales de EKHorus", deportes.ruta_catalogo_ekhorus(), "DefaultTVShows.png")
@@ -1637,6 +1679,47 @@ def estado_indice():
     xbmcgui.Dialog().ok("Estado de la comprobación de fuentes", "\n\n".join(lineas))
 
 
+def abrir_ventana_kodi(ventana):
+    xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+    xbmc.executebuiltin("ActivateWindow(%s)" % ventana)
+
+
+def informe_palantix():
+    tk, ad = servicio_por_id("trakt"), servicio_por_id("ad")
+    lineas = ["Palantix " + ADDON.getAddonInfo("version"),
+              "Catálogo TMDB: " + ("configurado" if clave_tmdb() else "sin configurar"),
+              "Trakt: " + ("vinculado" if tk.vinculado() else "sin vincular"),
+              "AllDebrid: " + ("vinculado" if ad.vinculado() else "sin vincular"),
+              "Stremio: " + ("activo" if ADDON.getSetting("prov_stremio") == "true" else "desactivado"),
+              "EKHorus/Horus: " + ("activo" if complemento_ace_stream() else "desactivado o ausente")]
+    if ADDON.getSetting("prov_stremio") == "true":
+        for n in range(1, 4):
+            origen = ADDON.getSetting("stremio_%d" % n).strip()
+            if origen:
+                try:
+                    Stremio(origen, n, cache=CACHE).leer_manifiesto()
+                    estado = "manifiesto accesible"
+                except (OSError, ValueError, TypeError, sqlite3.Error) as error:
+                    estado = motivo_error(error)
+                lineas.append("Fuente %d · %s" % (n, estado))
+    ultimo = xbmcgui.Window(10000).getProperty("palantix.ultimo_error")
+    if ultimo in ("Error de Kodi al continuar el vídeo", "Error de Kodi al iniciar el vídeo"):
+        lineas.append("Último error de reproducción: " + ultimo)
+    texto = "\n".join(lineas)
+    dialogo = xbmcgui.Dialog()
+    dialogo.textviewer("Informe de Palantix", texto)
+    if dialogo.yesno("Informe de Palantix", "¿Quieres guardar el informe para compartirlo?"):
+        destino = dialogo.browseSingle(3, "Carpeta para el informe de Palantix", "files")
+        if destino:
+            try:
+                ruta = os.path.join(xbmcvfs.translatePath(destino), "palantix-informe-%s.txt" % time.strftime("%Y%m%d-%H%M%S"))
+                with open(ruta, "x", encoding="utf-8") as f:
+                    f.write(texto)
+                aviso("Informe guardado")
+            except OSError:
+                aviso("No se pudo guardar el informe")
+
+
 def asistente_configuracion():
     addon = xbmcaddon.Addon()
     tk, ad = servicio_por_id("trakt"), servicio_por_id("ad")
@@ -1654,6 +1737,8 @@ def asistente_configuracion():
         ("Estado de la comprobación de fuentes", estado_indice),
         ("Probar vídeo directo · Sintel (Blender)", probar_video_asistente),
         ("Copiar preferencias a otro Kodi", copiar_preferencias),
+        ("Ordenar prioridad de idiomas", configurar_prioridad_idiomas),
+        ("Generar informe sin claves ni URLs", informe_palantix),
     ]
     seleccion = xbmcgui.Dialog().select("Comprobar mi configuración", [nombre for nombre, _ in opciones])
     if seleccion >= 0:
@@ -1800,7 +1885,12 @@ def reproducir():
     nombre = "%s %dx%02d" % (peli.titulo, peli.temporada, peli.episodio) if episodio else peli.titulo
     desde = 0
     previo = progreso.de(PERFIL, {"tipo": peli.tipo, "tmdb": peli.tmdb_id, "s": peli.temporada, "e": peli.episodio})
-    if previo and not PARAMS.get("desde_cero"):
+    if PARAMS.get("reintentar"):
+        offset = PARAMS.get("desde", "0")
+        desde = min(int(offset), 86400) if offset.isascii() and offset.isdecimal() and len(offset) <= 5 else 0
+    elif previo and PARAMS.get("continuar"):
+        desde = previo["pos"]
+    elif previo and not PARAMS.get("desde_cero"):
         n = xbmcgui.Dialog().contextmenu(["Reanudar desde %s" % progreso.hhmmss(previo["pos"]), "Desde el principio"])
         if n < 0:
             return no_reproducir()
@@ -1824,7 +1914,9 @@ def reproducir():
                 pref["prioridad_idiomas"] = (audio,)
         except (OSError, sqlite3.Error):
             log("No se pudieron recuperar las preferencias de la serie")
-    ordenadas = etiquetas.ordenar(fuentes, **pref)
+    excluidas = PARAMS.get("reintentar", "").split(",")[:12]
+    ordenadas = [(f, a) for f, a in etiquetas.ordenar(fuentes, **pref)
+                 if sha256(f.url.encode()).hexdigest()[:16] not in excluidas]
     if not ordenadas:
         if fallos:
             aviso("Búsqueda incompleta: " + ", ".join(sorted(set(fallos))))
@@ -1863,7 +1955,14 @@ def reproducir():
         sub = poner_subtitulos(peli, a, pref, subs_serie)
         if sub:
             li.setSubtitles([sub])
-        avisar_al_servicio(peli, prioridad_audio)
+        intentos = [h for h in excluidas if len(h) == 16] + [sha256(f.url.encode()).hexdigest()[:16]]
+        reintento = ""
+        if len(ordenadas) > 1 and len(intentos) <= 12:
+            reintento = url(accion="reproducir", tipo=peli.tipo, id=peli.tmdb_id, s=peli.temporada,
+                            e=peli.episodio, titulo=peli.titulo, original=peli.titulo_original,
+                            anio=peli.anio, elegir=1, desde=int(desde), reintentar=",".join(intentos),
+                            poster=PARAMS.get("poster", ""), fondo=PARAMS.get("fondo", ""))
+        avisar_al_servicio(peli, prioridad_audio, reintento)
         return xbmcplugin.setResolvedUrl(HANDLE, True, li)
     no_reproducir()
 
@@ -1897,13 +1996,13 @@ def poner_subtitulos(peli, analisis, pref, preferencia_serie=""):
     return None
 
 
-def avisar_al_servicio(peli, prioridad_audio=()):
+def avisar_al_servicio(peli, prioridad_audio=(), reintento=""):
     """Deja en la ventana principal qué va a sonar y cuál es el siguiente capítulo (lo lee service.py)."""
     ventana = xbmcgui.Window(10000)
     meta = {"tipo": peli.tipo, "tmdb": peli.tmdb_id, "s": peli.temporada, "e": peli.episodio,
             "titulo": peli.titulo, "original": peli.titulo_original, "anio": peli.anio,
             "poster": PARAMS.get("poster", ""), "fanart": PARAMS.get("fondo", ""),
-            "prioridad_audio": prioridad_audio, "inicio_solicitado": time.time()}
+            "prioridad_audio": prioridad_audio, "reintento": reintento, "inicio_solicitado": time.time()}
     ventana.setProperty("palantix.meta", json.dumps(meta))
     ventana.clearProperty("palantix.siguiente")
     if peli.tipo != "episodio" or ADDON.getSetting("siguiente_activo") == "false":
@@ -1944,6 +2043,8 @@ SIN_TMDB = {
     "deportes_anadir": anadir_fuente_deportes,
     "deportes_quitar": quitar_fuente_deportes,
     "deportes_horus": configurar_horus,
+    "deportes_cuadricula": lambda: abrir_ventana_kodi("TVGuide"),
+    "perfiles_kodi": lambda: abrir_ventana_kodi("profiles"),
     "deportes_hoy": lambda: listar_deportes(hoy=True),
     "deportes_eventos": lambda: listar_deportes(modo=PARAMS.get("modo")),
     "deportes_recordatorio": recordatorio_deporte,
@@ -1957,6 +2058,9 @@ SIN_TMDB = {
     "trakt": menu_trakt,
     "ajustes_serie": configurar_serie,
     "hoy_para_ti": hoy_para_ti,
+    "aviso_fuente": guardar_aviso_fuente,
+    "lista_avisos_fuentes": lista_avisos_fuentes,
+    "quitar_aviso_fuente": quitar_aviso_fuente,
     "explorar_filtros": explorar_filtros,
     "favoritas_disponibles": favoritas_disponibles,
     "oferta_streaming": oferta_streaming,

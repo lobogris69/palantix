@@ -8,7 +8,7 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from . import novedades, progreso, seguimiento
+from . import avisos_fuentes, novedades, progreso, seguimiento
 from .tmdb import TMDB
 from .explorar import GEN_DESTACADOS
 from .providers.cine_libre import TITULO as TITULO_CINE_LIBRE
@@ -21,6 +21,7 @@ FILAS = [
     (106, "Las mejor valoradas"),
     (107, "Mi lista"),
     (108, "Novedades en streaming"),
+    (109, "Avisos listos para ver"),
     (111, "Capítulos recientes"),
 ]
 TODAS = list(range(100, 112))  # ids de las filas del XML (101-102 anchas, 103-111 carátulas)
@@ -177,7 +178,7 @@ def accesos_generos(pestana, url, logo):
     return opciones
 
 
-def datos_filas(perfil, t, url, favoritas=(), filtrar_peliculas=lambda pelis: pelis):
+def datos_filas(perfil, t, url, favoritas=(), filtrar_peliculas=lambda pelis: pelis, ocultar_destripes=False):
     """{id_fila: [elementos]} listos para pintar."""
     filas = {fid: [] for fid, _ in FILAS}
     nov = novedades.leer(perfil)
@@ -199,7 +200,7 @@ def datos_filas(perfil, t, url, favoritas=(), filtrar_peliculas=lambda pelis: pe
             "plot": "Te quedaste en el %s." % progreso.hhmmss(d["pos"]),
             "info": _info(str(d.get("anio") or ""), "Película", "%d %%" % (100 * d["pos"] // max(1, d["total"]))),
             "resume": (d["pos"], d["total"]), "destacado": "A MEDIAS", "a_medias": "1", "tipo": "reproducir",
-            "url": url(accion="reproducir", id=d["tmdb"], titulo=d["titulo"], original=d.get("original", ""),
+            "url": url(accion="reproducir", id=d["tmdb"], titulo=d["titulo"], original=d.get("original", ""), continuar=1,
                        anio=d.get("anio", ""), poster=d.get("poster", ""), fondo=d.get("fanart", ""))})
     for sid, d in seguimiento.ordenadas(perfil):
         n = nov.get(sid) or {}
@@ -216,6 +217,9 @@ def datos_filas(perfil, t, url, favoritas=(), filtrar_peliculas=lambda pelis: pe
              "nuevo": "1" if n.get("nuevo") else "", "tipo": "reproducir",
              "url": url(accion="reproducir", tipo="episodio", id=sid, titulo=d["titulo"], original=d.get("original", ""),
                         anio=d.get("anio", ""), s=sig["s"], e=sig["e"], poster=d.get("poster", ""), fondo=d.get("fanart", ""))}
+        if ocultar_destripes:
+            e["thumb"] = _img(d.get("fanart"), "w780")
+            e["plot"] = "%dx%02d" % (sig["s"], sig["e"])
         filas[102 if n.get("nuevo") else 101].append(e)
 
     # 103-106 catálogo de TMDB
@@ -227,6 +231,15 @@ def datos_filas(perfil, t, url, favoritas=(), filtrar_peliculas=lambda pelis: pe
     # 107 Mi lista (favoritas)
     filas[107] = [elemento_pelicula(m, url) for m in favoritas if str(m["id"]) in visibles]
     filas[108] = [elemento_pelicula(m, url) for m in tm.get("streaming", []) if str(m["id"]) in visibles]
+    for ficha, confirmado in avisos_fuentes.leer(perfil):
+        if not confirmado:
+            continue
+        extra = {"tipo": "episodio", "s": ficha["temporada"], "e": ficha["episodio"]} if "episodio" in ficha else {}
+        titulo = ficha["title"]
+        etiqueta = titulo + (" · %dx%02d" % (extra["s"], extra["e"]) if extra else "")
+        filas[109].append({"label": etiqueta, "label2": etiqueta, "info": "Fuente confirmada", "tipo": "reproducir",
+                           "url": url(accion="reproducir", id=ficha["tmdb_id"], titulo=titulo,
+                                      original=ficha.get("original_title", ""), elegir=1, **extra)})
     filas[111] = [elemento_serie(serie, url, seguidas, nov) for serie in tm.get("capitulos_recientes", [])]
     return filas
 
@@ -260,7 +273,8 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
 
     def li(e):
         item = xbmcgui.ListItem(e["label"], e.get("label2", ""))
-        item.setArt({"poster": e.get("poster", ""), "fanart": e.get("fanart", ""), "thumb": e.get("thumb", ""),
+        fanart = "" if addon.getSetting("modo_visual") == "2" else e.get("fanart", "")
+        item.setArt({"poster": e.get("poster", ""), "fanart": fanart, "thumb": e.get("thumb", ""),
                      "icon": e.get("icon", "")})
         tag = item.getVideoInfoTag()
         tag.setPlot(e.get("plot", ""))
@@ -273,6 +287,7 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
     class Inicio(xbmcgui.WindowXML):
         def onInit(self):
             self.setProperty("logo", logo)
+            self.setProperty("modo_visual", addon.getSetting("modo_visual"))
             self.setProperty("version", addon.getAddonInfo("version"))
             self.setProperty("fondo_palantix", addon.getAddonInfo("fanart"))
             if getattr(self, "_listo", False):
@@ -301,7 +316,11 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
             self.setProperty("estado", "Cargando...")
             try:
                 if pestana == "inicio":
-                    filas = datos_filas(perfil, t, url, favoritas, filtrar_peliculas)
+                    mostrar_catalogo = addon.getSetting("inicio_mostrar_catalogo") != "false"
+                    filas = datos_filas(perfil, t if mostrar_catalogo else None, url, favoritas, filtrar_peliculas,
+                                        ocultar_destripes=addon.getSetting("series_sin_destripes") == "true")
+                    if not mostrar_catalogo:
+                        filas[111] = []
                 elif t:
                     filas = datos_pestana(perfil, t, url, pestana, filtrar_peliculas)
                 else:
@@ -316,7 +335,11 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
                 self.getControl(fid).reset()
                 self.clearProperty("fila%d" % fid)
             primera = None
-            for fid, titulo in sorted(titulos(pestana).items()):
+            nombres = titulos(pestana)
+            if pestana == "inicio" and addon.getSetting("inicio_primero_nuevos") == "true":
+                filas[101], filas[102] = filas.get(102, []), filas.get(101, [])
+                nombres[101], nombres[102] = nombres[102], nombres[101]
+            for fid, titulo in sorted(nombres.items()):
                 elementos = filas.get(fid, [])
                 if elementos:
                     self.setProperty("fila%d" % fid, titulo)

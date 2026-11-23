@@ -43,6 +43,7 @@ class Reproductor(xbmc.Player):
         super().__init__()
         self.meta = None
         self.siguiente = None
+        self.reintento = ""
         self.ofrecido = False
         self.ganchos = []  # módulos opcionales: objetos con al_empezar/al_avanzar/al_parar
         try:
@@ -53,6 +54,7 @@ class Reproductor(xbmc.Player):
 
     # --- eventos de Kodi
     def onAVStarted(self):
+        self.reintento = ""
         self.meta = propiedad_json("palantix.meta")
         self.siguiente = propiedad_json("palantix.siguiente")
         self.ofrecido = False
@@ -86,6 +88,11 @@ class Reproductor(xbmc.Player):
         solicitud = propiedad_json("palantix.meta") or {}
         reciente = time.time() - solicitud.get("inicio_solicitado", 0) < 90
         if self.meta or reciente:
+            VENTANA.setProperty("palantix.ultimo_error", "Error de Kodi al continuar el vídeo" if self.meta
+                                else "Error de Kodi al iniciar el vídeo")
+        if reciente and solicitud.get("reintento"):
+            self.reintento = solicitud["reintento"]
+        elif self.meta or reciente:
             xbmcgui.Dialog().notification("Palantix", "Kodi no pudo abrir o continuar el vídeo. Prueba otra fuente.",
                                          xbmcgui.NOTIFICATION_WARNING, 7000)
         VENTANA.clearProperty("palantix.meta")
@@ -113,6 +120,11 @@ class Reproductor(xbmc.Player):
 
     # --- cada segundo
     def vigilar(self):
+        if self.reintento and not self.isPlayingVideo():
+            destino = self.reintento
+            self.reintento = ""
+            if xbmcgui.Dialog().yesno("Palantix", "Kodi no pudo iniciar el vídeo. ¿Quieres elegir otra fuente?"):
+                xbmc.executebuiltin("PlayMedia(%s)" % destino)
         if not self.meta or not self.isPlayingVideo():
             return
         try:
@@ -213,10 +225,10 @@ def actualizar_solo():
         log("Actualización: %s" % e)
 
 
-def comprobar_fuentes():
+def comprobar_fuentes(revisar_avisos=False):
     """Procesa un lote sin bloquear el reproductor ni los listados."""
     import xbmcvfs
-    from resources.lib import disponibilidad, fuentes_catalogo, mislistas, tmdb
+    from resources.lib import avisos_fuentes, disponibilidad, fuentes_catalogo, mislistas, tmdb
 
     addon = xbmcaddon.Addon()
     ajustes = addon.getSetting
@@ -224,7 +236,9 @@ def comprobar_fuentes():
     episodios = ajustes("comprobar_fuentes_episodios") == "true"
     perfil = xbmcvfs.translatePath(addon.getAddonInfo("profile"))
     cache = os.path.join(perfil, "cache")
-    if not os.path.isfile(os.path.join(cache, "disponibilidad.sqlite")):
+    avisos = avisos_fuentes.leer(perfil) if revisar_avisos else []
+    por_avisar = [f for f, avisado in avisos if not avisado]
+    if not por_avisar and not os.path.isfile(os.path.join(cache, "disponibilidad.sqlite")):
         return
     clave = tmdb.limpiar_clave(ajustes("tmdb_key"))
     idioma, region = tmdb.idioma_de(ajustes("idioma_cat") or 0)
@@ -240,6 +254,17 @@ def comprobar_fuentes():
         disponible = fuentes_catalogo.hay_fuentes(ficha, buscar, pref)
         return None if fallos and not disponible else disponible
 
+    if por_avisar:
+        cola_avisos = (proveedores, pref, "avisos")
+        disponibilidad.filtrar(por_avisar[:200], cache, cola_avisos)
+        disponibilidad.comprobar_lote(cache, cola_avisos, consultar)
+        confirmadas, _ = disponibilidad.filtrar(por_avisar[:200], cache, cola_avisos)
+        for ficha in confirmadas:
+            if avisos_fuentes.avisar(perfil, ficha["id"]):
+                titulo = ficha["title"]
+                if "episodio" in ficha:
+                    titulo += " · %dx%02d" % (ficha["temporada"], ficha["episodio"])
+                xbmcgui.Dialog().notification("Fuente confirmada", titulo, xbmcgui.NOTIFICATION_INFO, 5500)
     if episodios:
         disponibilidad.comprobar_lote(cache, (proveedores, pref, "episodios"), consultar)
     if peliculas:
@@ -256,6 +281,7 @@ def main():
         avisar_caducidad()
     segundos = 0
     pendiente = None
+    ultimo_aviso = -60
     with ThreadPoolExecutor(max_workers=1) as consultas:
         while not monitor.abortRequested():
             reproductor.vigilar()
@@ -263,7 +289,10 @@ def main():
                 if pendiente is not None and pendiente.exception() is not None:
                     log("No se pudo actualizar el índice de fuentes")
                 if not reproductor.isPlayingVideo():
-                    pendiente = consultas.submit(comprobar_fuentes)
+                    revisar_avisos = segundos - ultimo_aviso >= 60
+                    if revisar_avisos:
+                        ultimo_aviso = segundos
+                    pendiente = consultas.submit(comprobar_fuentes, revisar_avisos)
                 else:
                     pendiente = None
             if segundos % (6 * 3600) == 40 and not reproductor.isPlayingVideo():  # al arrancar y cada 6 h

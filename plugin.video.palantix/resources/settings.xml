@@ -14,6 +14,10 @@
     </category>
     <category label="Catálogo">
         <setting id="solo_peliculas_con_fuentes" type="bool" label="Mostrar solo películas con fuentes" default="false"/>
+        <setting id="modo_visual" type="enum" label="Modo visual" values="Normal|Sofá (alto contraste)|Ligero" default="0"/>
+        <setting id="inicio_primero_nuevos" type="bool" label="Mostrar capítulos nuevos antes de Continuar" default="false"/>
+        <setting id="inicio_mostrar_catalogo" type="bool" label="Mostrar recomendaciones de catálogo en el inicio" default="true"/>
+        <setting type="action" label="Gestionar perfiles de casa en Kodi" action="RunPlugin(plugin://plugin.video.palantix/?accion=perfiles_kodi)"/>
         <setting id="inicio_plataforma" type="bool" label="Pantalla de inicio con carteles y filas de carátulas" default="true"/>
         <setting id="vista_listados" type="enum" label="Vista de películas y series" values="Carátulas grandes|Mosaico|Mosaico con información|Lista" default="0"/>
         <setting id="orden_listas" type="enum" label="Orden de géneros y años" values="Más populares|Más recientes|Mejor valoradas|Alfabético" default="0"/>
@@ -34,6 +38,7 @@
         <setting id="calidad_max" type="enum" label="Calidad máxima (baja si tu conexión es lenta)" values="4K|1080p|720p" default="0"/>
         <setting id="autoplay" type="bool" label="Reproducción automática (elige la mejor fuente sin preguntar)" default="false"/>
         <setting type="lsep" label="Series"/>
+        <setting id="series_sin_destripes" type="bool" label="Ocultar imágenes y sinopsis de capítulos sin ver" default="false"/>
         <setting id="umbral_visto" type="slider" label="Porcentaje del capítulo para marcarlo como visto" default="80" range="50,5,95" option="int"/>
         <setting id="comprobar_fuentes_episodios" type="bool" label="Comprobar fuentes de capítulos en segundo plano" default="true"/>
         <setting id="intro_activo" type="bool" label="Botón «Saltar intro» (capítulos del vídeo y lo que aprende de ti)" default="true"/>

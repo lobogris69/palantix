@@ -10,14 +10,14 @@
         <!-- cartel por defecto (con el menú enfocado o mientras carga) -->
         <control type="group">
             <visible>!Control.HasFocus(100) + !Control.HasFocus(101) + !Control.HasFocus(102) + !Control.HasFocus(103) + !Control.HasFocus(104) + !Control.HasFocus(105) + !Control.HasFocus(106) + !Control.HasFocus(107) + !Control.HasFocus(108) + !Control.HasFocus(109) + !Control.HasFocus(110) + !Control.HasFocus(111)</visible>
-            <control type="image"><left>420</left><width>1500</width><height>844</height><texture>$INFO[Window.Property(fondo_palantix)]</texture><aspectratio>scale</aspectratio></control>
+            <control type="image"><left>420</left><width>1500</width><height>844</height><texture>$INFO[Window.Property(fondo_palantix)]</texture><aspectratio>scale</aspectratio><visible>!String.IsEqual(Window.Property(modo_visual),2)</visible></control>
             <control type="image"><width>1920</width><height>1080</height><texture>degradado_izq.png</texture></control>
             <control type="image"><top>380</top><width>1920</width><height>700</height><texture>degradado_abajo.png</texture></control>
         </control>
         
         <control type="group">
             <visible>Control.HasFocus(100)</visible>
-            <animation effect="fade" start="0" end="100" time="300">Visible</animation>
+            <animation effect="fade" start="0" end="100" time="300" condition="!String.IsEqual(Window.Property(modo_visual),2)">Visible</animation>
             <control type="image">
                 <left>420</left><top>0</top><width>1500</width><height>844</height>
                 <texture background="true">$INFO[Container(100).ListItem.Art(fanart)]</texture><aspectratio>scale</aspectratio>
@@ -54,7 +54,7 @@
         </control>
         <control type="group">
             <visible>Control.HasFocus(101)</visible>
-            <animation effect="fade" start="0" end="100" time="300">Visible</animation>
+            <animation effect="fade" start="0" end="100" time="300" condition="!String.IsEqual(Window.Property(modo_visual),2)">Visible</animation>
             <control type="image">
                 <left>420</left><top>0</top><width>1500</width><height>844</height>
                 <texture background="true">$INFO[Container(101).ListItem.Art(fanart)]</texture><aspectratio>scale</aspectratio>
@@ -91,7 +91,7 @@
         </control>
         <control type="group">
             <visible>Control.HasFocus(102)</visible>
-            <animation effect="fade" start="0" end="100" time="300">Visible</animation>
+            <animation effect="fade" start="0" end="100" time="300" condition="!String.IsEqual(Window.Property(modo_visual),2)">Visible</animation>
             <control type="image">
                 <left>420</left><top>0</top><width>1500</width><height>844</height>
                 <texture background="true">$INFO[Container(102).ListItem.Art(fanart)]</texture><aspectratio>scale</aspectratio>
@@ -128,7 +128,7 @@
         </control>
         <control type="group">
             <visible>Control.HasFocus(103)</visible>
-            <animation effect="fade" start="0" end="100" time="300">Visible</animation>
+            <animation effect="fade" start="0" end="100" time="300" condition="!String.IsEqual(Window.Property(modo_visual),2)">Visible</animation>
             <control type="image">
                 <left>420</left><top>0</top><width>1500</width><height>844</height>
                 <texture background="true">$INFO[Container(103).ListItem.Art(fanart)]</texture><aspectratio>scale</aspectratio>
@@ -165,7 +165,7 @@
         </control>
         <control type="group">
             <visible>Control.HasFocus(104)</visible>
-            <animation effect="fade" start="0" end="100" time="300">Visible</animation>
+            <animation effect="fade" start="0" end="100" time="300" condition="!String.IsEqual(Window.Property(modo_visual),2)">Visible</animation>
             <control type="image">
                 <left>420</left><top>0</top><width>1500</width><height>844</height>
                 <texture background="true">$INFO[Container(104).ListItem.Art(fanart)]</texture><aspectratio>scale</aspectratio>
@@ -202,7 +202,7 @@
         </control>
         <control type="group">
             <visible>Control.HasFocus(105)</visible>
-            <animation effect="fade" start="0" end="100" time="300">Visible</animation>
+            <animation effect="fade" start="0" end="100" time="300" condition="!String.IsEqual(Window.Property(modo_visual),2)">Visible</animation>
             <control type="image">
                 <left>420</left><top>0</top><width>1500</width><height>844</height>
                 <texture background="true">$INFO[Container(105).ListItem.Art(fanart)]</texture><aspectratio>scale</aspectratio>
@@ -239,7 +239,7 @@
         </control>
         <control type="group">
             <visible>Control.HasFocus(106)</visible>
-            <animation effect="fade" start="0" end="100" time="300">Visible</animation>
+            <animation effect="fade" start="0" end="100" time="300" condition="!String.IsEqual(Window.Property(modo_visual),2)">Visible</animation>
             <control type="image">
                 <left>420</left><top>0</top><width>1500</width><height>844</height>
                 <texture background="true">$INFO[Container(106).ListItem.Art(fanart)]</texture><aspectratio>scale</aspectratio>
@@ -276,7 +276,7 @@
         </control>
         <control type="group">
             <visible>Control.HasFocus(107)</visible>
-            <animation effect="fade" start="0" end="100" time="300">Visible</animation>
+            <animation effect="fade" start="0" end="100" time="300" condition="!String.IsEqual(Window.Property(modo_visual),2)">Visible</animation>
             <control type="image">
                 <left>420</left><top>0</top><width>1500</width><height>844</height>
                 <texture background="true">$INFO[Container(107).ListItem.Art(fanart)]</texture><aspectratio>scale</aspectratio>
@@ -313,7 +313,7 @@
         </control>
         <control type="group">
             <visible>Control.HasFocus(108)</visible>
-            <animation effect="fade" start="0" end="100" time="300">Visible</animation>
+            <animation effect="fade" start="0" end="100" time="300" condition="!String.IsEqual(Window.Property(modo_visual),2)">Visible</animation>
             <control type="image">
                 <left>420</left><top>0</top><width>1500</width><height>844</height>
                 <texture background="true">$INFO[Container(108).ListItem.Art(fanart)]</texture><aspectratio>scale</aspectratio>
@@ -350,7 +350,7 @@
         </control>
         <control type="group">
             <visible>Control.HasFocus(109)</visible>
-            <animation effect="fade" start="0" end="100" time="300">Visible</animation>
+            <animation effect="fade" start="0" end="100" time="300" condition="!String.IsEqual(Window.Property(modo_visual),2)">Visible</animation>
             <control type="image">
                 <left>420</left><top>0</top><width>1500</width><height>844</height>
                 <texture background="true">$INFO[Container(109).ListItem.Art(fanart)]</texture><aspectratio>scale</aspectratio>
@@ -387,7 +387,7 @@
         </control>
         <control type="group">
             <visible>Control.HasFocus(110)</visible>
-            <animation effect="fade" start="0" end="100" time="300">Visible</animation>
+            <animation effect="fade" start="0" end="100" time="300" condition="!String.IsEqual(Window.Property(modo_visual),2)">Visible</animation>
             <control type="image">
                 <left>420</left><top>0</top><width>1500</width><height>844</height>
                 <texture background="true">$INFO[Container(110).ListItem.Art(fanart)]</texture><aspectratio>scale</aspectratio>
@@ -424,7 +424,7 @@
         </control>
         <control type="group">
             <visible>Control.HasFocus(111)</visible>
-            <animation effect="fade" start="0" end="100" time="300">Visible</animation>
+            <animation effect="fade" start="0" end="100" time="300" condition="!String.IsEqual(Window.Property(modo_visual),2)">Visible</animation>
             <control type="image">
                 <left>420</left><top>0</top><width>1500</width><height>844</height>
                 <texture background="true">$INFO[Container(111).ListItem.Art(fanart)]</texture><aspectratio>scale</aspectratio>
@@ -661,7 +661,9 @@
                     <control type="image"><left>12</left><top>5</top><width>340</width><height>58</height><texture colordiffuse="FF1C2A40" border="20">pildora.png</texture>
                         <visible>!Control.HasFocus(200) + String.IsEqual(ListItem.Property(activa),1)</visible></control>
                     <control type="image"><left>12</left><top>5</top><width>340</width><height>58</height><texture colordiffuse="FF254469" border="20">pildora.png</texture>
-                        <visible>Control.HasFocus(200)</visible></control>
+                        <visible>Control.HasFocus(200) + !String.IsEqual(Window.Property(modo_visual),1)</visible></control>
+                    <control type="image"><left>12</left><top>5</top><width>340</width><height>58</height><texture colordiffuse="FF245995" border="20">pildora.png</texture>
+                        <visible>Control.HasFocus(200) + String.IsEqual(Window.Property(modo_visual),1)</visible></control>
                     <control type="image"><left>12</left><top>17</top><width>4</width><height>34</height><texture colordiffuse="FF14A9FF">blanco.png</texture>
                         <visible>Control.HasFocus(200)</visible></control>
                     <control type="image"><left>28</left><top>16</top><width>36</width><height>36</height><texture>$INFO[ListItem.Icon]</texture></control>

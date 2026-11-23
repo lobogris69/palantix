@@ -100,7 +100,7 @@ def cartel(fid):
     return '''
         <control type="group">
             <visible>Control.HasFocus(%(id)d)</visible>
-            <animation effect="fade" start="0" end="100" time="300">Visible</animation>
+            <animation effect="fade" start="0" end="100" time="300" condition="!String.IsEqual(Window.Property(modo_visual),2)">Visible</animation>
             <control type="image">
                 <left>420</left><top>0</top><width>1500</width><height>844</height>
                 <texture background="true">$INFO[%(c)s.Art(fanart)]</texture><aspectratio>scale</aspectratio>
@@ -152,7 +152,7 @@ def xml():
         <!-- cartel por defecto (con el menú enfocado o mientras carga) -->
         <control type="group">
             <visible>%(ninguna)s</visible>
-            <control type="image"><left>420</left><width>1500</width><height>844</height><texture>$INFO[Window.Property(fondo_palantix)]</texture><aspectratio>scale</aspectratio></control>
+            <control type="image"><left>420</left><width>1500</width><height>844</height><texture>$INFO[Window.Property(fondo_palantix)]</texture><aspectratio>scale</aspectratio><visible>!String.IsEqual(Window.Property(modo_visual),2)</visible></control>
             <control type="image"><width>1920</width><height>1080</height><texture>degradado_izq.png</texture></control>
             <control type="image"><top>380</top><width>1920</width><height>700</height><texture>degradado_abajo.png</texture></control>
         </control>
@@ -191,7 +191,9 @@ def xml():
                     <control type="image"><left>12</left><top>5</top><width>340</width><height>58</height><texture colordiffuse="FF1C2A40" border="20">pildora.png</texture>
                         <visible>!Control.HasFocus(%(menu)d) + String.IsEqual(ListItem.Property(activa),1)</visible></control>
                     <control type="image"><left>12</left><top>5</top><width>340</width><height>58</height><texture colordiffuse="FF254469" border="20">pildora.png</texture>
-                        <visible>Control.HasFocus(%(menu)d)</visible></control>
+                        <visible>Control.HasFocus(%(menu)d) + !String.IsEqual(Window.Property(modo_visual),1)</visible></control>
+                    <control type="image"><left>12</left><top>5</top><width>340</width><height>58</height><texture colordiffuse="FF245995" border="20">pildora.png</texture>
+                        <visible>Control.HasFocus(%(menu)d) + String.IsEqual(Window.Property(modo_visual),1)</visible></control>
                     <control type="image"><left>12</left><top>17</top><width>4</width><height>34</height><texture colordiffuse="%(acento)s">blanco.png</texture>
                         <visible>Control.HasFocus(%(menu)d)</visible></control>
                     <control type="image"><left>28</left><top>16</top><width>36</width><height>36</height><texture>$INFO[ListItem.Icon]</texture></control>
