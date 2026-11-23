@@ -12,6 +12,7 @@ import json
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 
 import xbmc
 import xbmcaddon
@@ -194,11 +195,15 @@ def comprobar_novedades():
         return
     try:
         import xbmcvfs
-        from resources.lib import novedades, tmdb
+        from resources.lib import novedades, seguimiento, tmdb, trakt
         perfil = xbmcvfs.translatePath(addon.getAddonInfo("profile"))
         idioma, region = tmdb.idioma_de(addon.getSetting("idioma_cat") or 0)
         t = tmdb.TMDB(clave, idioma, region)
-        for titulo, ult in novedades.refrescar(perfil, t, log=log):
+        vistos = {}
+        if seguimiento.leer(perfil):
+            ajustes = SimpleNamespace(get=addon.getSetting, set=addon.setSetting)
+            vistos = trakt.Trakt(ajustes, log=log, timeout=5).historial_episodios(os.path.join(perfil, "cache"))
+        for titulo, ult in novedades.refrescar(perfil, t, log=log, vistos_trakt=vistos):
             texto = "Nuevo capítulo de %s: %dx%02d" % (titulo, ult["s"], ult["e"])
             xbmcgui.Dialog().notification("Palantix", texto, xbmcaddon.Addon().getAddonInfo("icon"), 10000)
             log(texto)

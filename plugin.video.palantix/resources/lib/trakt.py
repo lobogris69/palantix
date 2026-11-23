@@ -4,8 +4,12 @@ lista de pendientes (watchlist) y listas personales.
 Usa el Client ID de la aplicación para vincular una cuenta con código de dispositivo.
 """
 from concurrent.futures import ThreadPoolExecutor
+from hashlib import sha256
+from pathlib import Path
 import json
+import os
 import random
+from tempfile import NamedTemporaryFile
 import time
 import urllib.error
 import urllib.request
@@ -15,6 +19,7 @@ from . import ganchos
 API = "https://api.trakt.tv"
 CLIENT_ID_PALANTIX = "W6qEUdrilK5ucvZgQOEViv2VbkjASxcgergDvXu_6Co"
 REDIRECT = "urn:ietf:wg:oauth:2.0:oob"
+CACHE_VISTOS = "trakt-vistos.json"
 NOTAS = ["10 · Obra maestra", "9 · Excelente", "8 · Muy buena", "7 · Buena", "6 · Está bien", "5 · Regular",
          "4 · Flojita", "3 · Mala", "2 · Muy mala", "1 · Horrible"]
 
@@ -26,8 +31,8 @@ class TraktError(Exception):
 class Trakt:
     id, nombre, tipo_vinculo = "trakt", "Trakt", "pin"
 
-    def __init__(self, ajustes, log=print):
-        self.aj, self.log = ajustes, log
+    def __init__(self, ajustes, log=print, timeout=20):
+        self.aj, self.log, self.timeout = ajustes, log, timeout
 
     # ------------------------------------------------------------ estado
     def client_id(self):
@@ -55,7 +60,7 @@ class Trakt:
         datos = json.dumps(cuerpo).encode() if cuerpo is not None else None
         req = urllib.request.Request(API + ruta, data=datos, headers=cab, method=metodo)
         try:
-            with urllib.request.urlopen(req, timeout=20) as r:
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
                 texto = r.read().decode("utf-8")
                 return r.status, (json.loads(texto) if texto.strip() else {})
         except urllib.error.HTTPError as e:
@@ -166,6 +171,64 @@ class Trakt:
         clave = "movie" if tipo == "movies" else "show"
         return [(x[clave]["ids"].get("tmdb"), x[clave].get("title"), x[clave].get("year"))
                 for x in self._ok("GET", "/sync/watchlist/%s" % tipo) if x.get(clave, {}).get("ids", {}).get("tmdb")]
+
+    def _sesion_cache(self):
+        datos = self.client_id() + "\0" + self.aj.get("trakt_token")
+        return sha256(datos.encode()).hexdigest()
+
+    def historial_episodios(self, cache):
+        """Historial de episodios vistos por ID TMDB. La caché pertenece a la sesión vinculada."""
+        if not self.encendido():
+            return {}
+        ruta = Path(cache) / CACHE_VISTOS
+        sesion = self._sesion_cache()
+        guardado = {}
+        try:
+            datos = json.loads(ruta.read_text(encoding="utf-8"))
+            if datos["sesion"] == sesion and isinstance(datos["series"], dict):
+                edad = time.time() - datos["fecha"]
+                if 0 <= edad < 120:
+                    return datos["series"]
+                if 0 <= edad < 86400:
+                    guardado = datos["series"]
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+        try:
+            filas = self._ok("GET", "/sync/watched/shows")
+            if not isinstance(filas, list):
+                raise TraktError("Trakt devolvió un historial no válido")
+            series = {}
+            for fila in filas:
+                tmdb = fila["show"]["ids"].get("tmdb")
+                if not tmdb:
+                    continue
+                vistos = series.setdefault(str(tmdb), set())
+                for temp in fila["seasons"]:
+                    vistos.update("%d:%d" % (temp["number"], ep["number"])
+                                  for ep in temp["episodes"] if ep.get("plays", 0) > 0)
+            series = {sid: sorted(vistos) for sid, vistos in series.items()}
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, TraktError):
+            self.log("No se pudo leer el historial de episodios de Trakt")
+            return guardado
+
+        if self._sesion_cache() != sesion:
+            return series  # una renovación de sesión se reflejará en la próxima consulta
+        temporal = None
+        try:
+            ruta.parent.mkdir(parents=True, exist_ok=True)
+            with NamedTemporaryFile(dir=ruta.parent, mode="w", encoding="utf-8", delete=False) as fichero:
+                temporal = Path(fichero.name)
+                json.dump({"sesion": sesion, "fecha": time.time(), "series": series}, fichero)
+            os.replace(temporal, ruta)
+        except OSError:
+            self.log("No se pudo guardar el historial de episodios de Trakt")
+        finally:
+            if temporal:
+                try:
+                    temporal.unlink(missing_ok=True)
+                except OSError:
+                    pass
+        return series
 
     def progreso_series(self, pagina, limite=12):
         """Una página del historial, con la cuenta vinculada como origen del progreso."""

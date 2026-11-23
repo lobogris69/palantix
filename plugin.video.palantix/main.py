@@ -924,7 +924,8 @@ def fuentes_episodios(sid, datos, capitulos):
 def seguir_viendo(t):
     """Muestra las series en seguimiento, con filtros por estado desde la sección Series."""
     if t:
-        novedades.refrescar(PERFIL, t, log=log)
+        vistos = trakt.Trakt(AJ, log=log, timeout=5).historial_episodios(CACHE) if mis_series() else {}
+        novedades.refrescar(PERFIL, t, log=log, vistos_trakt=vistos)
         _CACHE.pop("novedades", None)
     xbmcplugin.setContent(HANDLE, "episodes")
     filtro = PARAMS.get("estado", "")
@@ -1208,17 +1209,20 @@ def capitulos(t):
     xbmcplugin.setContent(HANDLE, "episodes")
     serie = PARAMS.get("titulo", "")
     hoy = time.strftime("%Y-%m-%d")
-    seg = mis_series().get(str(PARAMS["id"])) or {}
+    sid = str(PARAMS["id"])
+    seg = mis_series().get(sid) or {}
+    vistos = trakt.Trakt(AJ, log=log, timeout=5).historial_episodios(CACHE)
+    historial = seguimiento.con_historial_trakt(seg, vistos.get(sid))
     visto_dia = time.strftime("%Y-%m-%d", time.localtime(seg["fecha"])) if seg.get("fecha") else ""
     episodios = temp.get("episodes", [])
     emitidos = [(ep["season_number"], ep["episode_number"]) for ep in episodios
                 if ep.get("air_date") and ep["air_date"] <= hoy
-                and not seguimiento.esta_visto(seg, ep["season_number"], ep["episode_number"])]
+                and not seguimiento.esta_visto(historial, ep["season_number"], ep["episode_number"])]
     confirmados, _ = fuentes_episodios(PARAMS["id"], PARAMS, emitidos)
     for ep in episodios:
         emitido = ep.get("air_date") or ""
         n_s, n_e = ep["season_number"], ep["episode_number"]
-        visto = seguimiento.esta_visto(seg, n_s, n_e)
+        visto = seguimiento.esta_visto(historial, n_s, n_e)
         spoiler = ADDON.getSetting("series_sin_destripes") == "true" and not visto
         titulo_episodio = "Episodio %d" % n_e if spoiler else ep.get("name") or ""
         nombre = "%dx%02d. %s" % (n_s, n_e, titulo_episodio)
@@ -1246,7 +1250,7 @@ def capitulos(t):
         if visto:
             tag.setPlaycount(1)  # marca de visto
         prog = mi_progreso().get("e:%s:%s:%s" % (PARAMS["id"], n_s, n_e))
-        if prog:
+        if prog and not visto:
             tag.setResumePoint(float(prog["pos"]), float(prog["total"]))
             li.setLabel(li.getLabel() + " · A medias")
         li.setProperty("IsPlayable", "true")
@@ -1280,6 +1284,11 @@ def marcar_capitulo():
             resultado = tk.marcar_visto(meta, visto)
             if any(resultado.get("not_found", {}).values()):
                 aviso("Guardado en Palantix. Trakt no encuentra ese capítulo.")
+            else:
+                try:
+                    os.unlink(os.path.join(CACHE, trakt.CACHE_VISTOS))
+                except OSError:
+                    pass
         except (OSError, ValueError, trakt.TraktError):
             aviso("Guardado en Palantix. Falló la sincronización con Trakt.")
     xbmc.executebuiltin("Container.Refresh")
