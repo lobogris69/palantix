@@ -1982,14 +1982,13 @@ def elegir_fuentes(ordenadas, titulo, automatico):
     while restantes:
         seleccion = 0
         if not automatico:
-            textos = []
+            opciones = []
             for fuente, analisis in restantes:
-                nombre = fuente.etiqueta
-                formato = etiquetas.formato_video(fuente.url, nombre)
-                texto = " · ".join(filter(None, (marcas_visibles(analisis) or etiquetas.texto_etiquetas(analisis),
-                                                fuente.proveedor, formato, nombre)))
-                textos.append(texto)
-            seleccion = xbmcgui.Dialog().select(titulo, textos)
+                resumen = etiquetas.resumen_fuente(fuente, analisis)
+                extras = " ".join(analisis["extras"])
+                detalle = " · ".join(dict.fromkeys(filter(None, (fuente.proveedor, extras, fuente.etiqueta))))
+                opciones.append(xbmcgui.ListItem(label=resumen, label2=detalle))
+            seleccion = xbmcgui.Dialog().select(titulo, opciones, useDetails=True)
             if seleccion < 0 or seleccion >= len(restantes):
                 return
         fuente, analisis = restantes.pop(seleccion)

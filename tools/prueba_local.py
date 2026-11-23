@@ -79,8 +79,9 @@ LIS = []
 
 
 class ListItem:
-    def __init__(self, label="", path=""):
+    def __init__(self, label="", label2="", path=""):
         self.label, self.path, self.props, self.menu = label, path, {}, []
+        self.label2 = label2
         self.tag = _Tag()
         LIS.append(self)
 
@@ -108,6 +109,11 @@ def _mod(nombre, **attrs):
     sys.modules[nombre] = m
 
 
+def _seleccionar(titulo, opciones, **ajustes):
+    REGISTRO["selector"] = (titulo, opciones, ajustes)
+    return REGISTRO["select"]
+
+
 _mod("xbmc", LOGINFO=1, log=lambda m, l=0: print("   LOG", m),
      executebuiltin=lambda c: REGISTRO["builtin"].append(c), sleep=lambda ms: None, Player=_Player, getInfoLabel=lambda k: "", getSkinDir=lambda: "skin.estuary", getLanguage=lambda *a: "es", ISO_639_1=0, executeJSONRPC=lambda q: "{\"result\":true}",
      Monitor=lambda: types.SimpleNamespace(abortRequested=lambda: True, waitForAbort=lambda s: True), getCondVisibility=lambda c: False)
@@ -119,7 +125,7 @@ _mod("xbmcgui", ListItem=ListItem, NOTIFICATION_INFO=0, Window=_Ventana,
                                                  update=lambda *a: None, iscanceled=lambda: False),
      Dialog=lambda: types.SimpleNamespace(
          notification=lambda t, m, *a: REGISTRO["avisos"].append(m), ok=lambda *a: None,
-         input=lambda *a: REGISTRO.get("input", ""), contextmenu=lambda ops: (print("   MENÚ:", ops), REGISTRO.get("menu", 0))[1], select=lambda t, ops: (print("   SELECTOR:", ops), REGISTRO["select"])[1]))
+         input=lambda *a: REGISTRO.get("input", ""), contextmenu=lambda ops: (print("   MENÚ:", ops), REGISTRO.get("menu", 0))[1], select=_seleccionar))
 _mod("xbmcplugin", SORT_METHOD_LABEL=1, SORT_METHOD_VIDEO_YEAR=2, SORT_METHOD_UNSORTED=0,
      addDirectoryItem=lambda h, u, li, isFolder=False: REGISTRO["items"].append((li.label, u)),
      addDirectoryItems=lambda h, its, n=0: REGISTRO["items"].extend((li.label, u) for u, li, _ in its),
@@ -129,7 +135,7 @@ _mod("xbmcplugin", SORT_METHOD_LABEL=1, SORT_METHOD_VIDEO_YEAR=2, SORT_METHOD_UN
 
 
 def abrir(consulta=""):
-    REGISTRO.update(items=[], resuelto=None, avisos=[])
+    REGISTRO.update(items=[], resuelto=None, avisos=[], selector=None)
     del LIS[:]
     sys.argv = ["plugin://plugin.video.palantix/", "1", consulta]
     for m in [m for m in sys.modules if m.startswith("resources")]:
@@ -270,6 +276,11 @@ comprobar("sin reproducción automática, una sola fuente requiere confirmación
 REGISTRO["select"] = 0
 r = abrir("?" + urlencode({"accion": "reproducir", "id": 653, "titulo": "Nosferatu", "anio": "1922"}))
 comprobar("ficha TMDB encuentra su fuente en la lista por tmdb_id", r["resuelto"] == (True, "https://ejemplo.invalid/nosferatu.mp4"))
+_, opciones, ajustes = r["selector"]
+comprobar("el selector abre la vista detallada y muestra el idioma desconocido en primera línea",
+          ajustes == {"useDetails": True} and
+          opciones[0].label == "Idioma sin indicar · 720p · MP4" and
+          "Nosferatu" in opciones[0].label2)
 
 r = abrir("?" + urlencode({"accion": "reproducir", "id": 961, "titulo": "El maquinista de la General",
                           "original": "The General", "anio": "1926"}))
@@ -318,13 +329,24 @@ comprobar("capítulos numerados y el futuro en gris", r["items"][1][0] == "1x02.
 
 EP = "?" + urlencode({"accion": "reproducir", "tipo": "episodio", "id": 100, "titulo": "Ficción", "anio": "2020", "s": 1, "e": 2})
 REGISTRO["select"] = 1  # el usuario elige la 2ª del selector (la 1ª es el magnet)
-print("   (selector de fuentes, mejor arriba:)")
 r = abrir(EP)
 comprobar("capítulo: selector ordenado y reproduce la elegida",
           r["resuelto"] == (True, "https://ejemplo.invalid/ficcion.s01e02.CASTELLANO.2160p.mkv"))
+_, opciones, _ = r["selector"]
+comprobar("la primera línea de las opciones distingue castellano y latino",
+          opciones[1].label == "Castellano · 4K · MKV" and
+          any(op.label == "Latino · 1080p · MKV" for op in opciones))
 REGISTRO["select"] = 0
 from resources.lib import etiquetas as et  # noqa: E402
 from resources.lib.providers import ListaURL as LU, Peli as P  # noqa: E402
+from resources.lib.providers.stremio import Stremio  # noqa: E402
+fuente_stream = Stremio._fuente({
+    "name": "4K",
+    "description": "Película de ejemplo con un nombre largo que precede a los datos de audio [ES]\n19.33 GB",
+    "url": "https://ejemplo.invalid/video.mkv",
+}, "Proveedor de prueba")
+comprobar("idioma y tamaño de Stremio se extraen aunque estén al final de la descripción",
+          et.resumen_fuente(fuente_stream, et.analizar(fuente_stream.etiqueta)) == "Español · 4K · MKV · 19.33 GB")
 fu = LU([LISTA_SERIES]).buscar(P("Ficción", tmdb_id=100, tipo="episodio", temporada=1, episodio=2))
 orden = [f.url.rsplit("/", 1)[-1] for f, _ in et.ordenar(fu, idioma="CAST")]
 print("   orden CAST:", orden)
