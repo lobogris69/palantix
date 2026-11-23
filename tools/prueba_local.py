@@ -7,6 +7,7 @@ import os
 import runpy
 import sys
 import tempfile
+from unittest.mock import patch
 import types
 
 RAIZ = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "plugin.video.palantix")
@@ -299,7 +300,8 @@ comprobar("favorita quitada", r["items"] == [])
 
 # ---------------------------------------------------------------- series
 r = abrir("?accion=m_series")
-comprobar("menú Series con Capítulos recientes", len(r["items"]) == 7 and r["items"][0][0] == "Capítulos recientes")
+comprobar("menú Series integra seguimiento y Capítulos recientes",
+          len(r["items"]) == 8 and r["items"][0][0] == "Series en seguimiento" and r["items"][1][0] == "Capítulos recientes")
 r = abrir("?accion=m_peliculas")
 comprobar("menú Películas con Novedades en streaming",
           len(r["items"]) == 8 and any(i[0] == "Novedades en streaming" for i in r["items"]))
@@ -422,7 +424,19 @@ r = abrir("?accion=seguir")
 comprobar("al día (1x03 sin emitir): se oculta y avisa", r["items"] == [] and r["avisos"])
 AJUSTES["ocultar_al_dia"] = "false"
 r = abrir("?accion=seguir")
-comprobar("al día: si no se oculta, sale en gris", r["items"] and "al día" in r["items"][0][0])
+comprobar("al día: si no se oculta, se muestra el estado", r["items"] and "Al día" in r["items"][0][0])
+r = abrir("?accion=seguir&estado=todos")
+comprobar("Series en seguimiento ofrece los tres estados",
+          [i[0] for i in r["items"][:3]] == ["Nuevo (0)", "Al día (1)", "Terminada (0)"])
+r = abrir("?accion=seguir&estado=al_dia")
+comprobar("filtro Al día abre las temporadas", len(r["items"]) == 1 and "accion=temporadas" in r["items"][0][1])
+from resources.lib import novedades as novedades_vista  # noqa: E402
+datos_estado = novedades_vista.leer(TMP)
+datos_estado["100"]["en_emision"] = False
+datos_estado["100"]["proximo"] = None
+novedades_vista._guardar(TMP, datos_estado)
+r = abrir("?accion=seguir&estado=terminada")
+comprobar("filtro Terminada muestra la serie completa", len(r["items"]) == 1 and "Terminada" in r["items"][0][0])
 r = abrir("?accion=dejar_seguir&id=100")
 comprobar("quitar de seguimiento", "100" not in sg.leer(TMP))
 
@@ -434,7 +448,8 @@ from resources.lib import novedades as nv  # noqa: E402
 est = nv.estado(_tm.TMDB("x"), 100, 1, 1, 1546300800)
 comprobar("novedades: 1 pendiente y marcado como NUEVO", est["pendientes"] == 1 and est["nuevo"] and est["siguiente"]["e"] == 2)
 est = nv.estado(_tm.TMDB("x"), 100, 1, 1, __import__("time").time())
-comprobar("novedades: si ya lo sabías (visto hoy) es pendiente pero no NUEVO", est["pendientes"] == 1 and not est["nuevo"])
+comprobar("novedades: si ya lo sabías (visto hoy), aparece en Nuevo sin repetir el aviso",
+          est["pendientes"] == 1 and not est["nuevo"] and nv.estado_vista(est) == "nuevo")
 r = abrir("?accion=seguir")
 comprobar("Seguir viendo: distintivo ● NUEVO", r["items"] and "● NUEVO" in r["items"][0][0])
 r = abrir("")
@@ -521,6 +536,34 @@ class _S:
 
 av = dbr.avisos_caducidad([_S("Real-Debrid", 3), _S("AllDebrid", 40), _S("Premiumize", 0), _S("X", RuntimeError())])
 comprobar("aviso de caducidad solo para las que caducan pronto", av == ["Real-Debrid caduca en 3 días", "Premiumize ha caducado"])
+
+# Índice local: se guarda la disponibilidad y la búsqueda al abrir el título puede actualizarla.
+from resources.lib import disponibilidad as indice  # noqa: E402
+
+config = (("proveedores",), {"idioma": "CAST"})
+ficha = {"id": 42, "title": "Ejemplo"}
+with tempfile.TemporaryDirectory() as cache:
+    with patch.object(indice.time, "time", return_value=100):
+        indice.filtrar([ficha], cache, config)
+        indice.comprobar_lote(cache, config, lambda f: True)
+    with patch.object(indice.time, "time", return_value=10 * indice.DIA):
+        comprobar("una fuente confirmada sigue visible y no vuelve a la cola al navegar",
+                  indice.filtrar([ficha], cache, config) == ([ficha], False))
+        indice.registrar(cache, config, ficha["id"], False)
+        comprobar("una búsqueda completa sin fuentes al abrir el título actualiza el índice",
+                  indice.filtrar([ficha], cache, config) == ([], False))
+        otro = {"id": 43}
+        indice.filtrar([otro], cache, config)
+
+        def comprobar_en_paralelo(f):
+            indice.registrar(cache, config, f["id"], True)
+            return False
+
+        indice.comprobar_lote(cache, config, comprobar_en_paralelo)
+        comprobar("un lote antiguo no pisa la comprobación al abrir el título",
+                  indice.filtrar([otro], cache, config) == ([otro], False))
+        comprobar("una configuración distinta de idioma vuelve a comprobar",
+                  indice.filtrar([otro], cache, (config[0], {"idioma": "LAT"})) == ([], True))
 
 # Internet Archive real (necesita Internet)
 from resources.lib.providers import Peli  # noqa: E402

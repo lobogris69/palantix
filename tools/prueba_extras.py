@@ -272,6 +272,15 @@ comprobar("pestaña Series: las series abren sus temporadas", ser[106][0]["label
           and ser[106][0]["tipo"] == "carpeta" and "accion=temporadas" in ser[106][0]["url"])
 comprobar("pestaña Series: capítulos recientes abre la serie",
           ser[111][0]["label"] == "Serie 8000" and "accion=temporadas" in ser[111][0]["url"])
+for sid, titulo in ((8001, "Completa"), (8002, "Al corriente"), (8003, "Con pendientes")):
+    sg.marcar_visto(PP, {"tmdb": sid, "tipo": "episodio", "s": 1, "e": 1, "titulo": titulo})
+nv._guardar(PP, {"8001": {"ultimo": {"e": 1}, "en_emision": False},
+                 "8002": {"ultimo": {"e": 1}, "en_emision": True},
+                 "8003": {"pendientes": 1}})
+ser = inicio.datos_pestana(PP, TPestanas(), url, "series")
+comprobar("pestaña Series: seguimiento visible y ordenado por estado",
+          inicio.titulos("series")[101] == "Series en seguimiento" and
+          [e["destacado"] for e in ser[101]] == ["Nuevo", "Al día", "Terminada"])
 antes = TFalso.llamadas
 inicio.datos_pestana(PP, TPestanas(), url, "peliculas")
 comprobar("pestañas: la segunda vez abren al instante (caché)", TFalso.llamadas == antes)

@@ -72,12 +72,13 @@ def elemento_pelicula(m, url):
 
 def elemento_serie(s, url, seguidas=(), nov=None):
     sid = str(s["id"])
-    estado = (nov or {}).get(sid) or {}
-    marca = "● NUEVO CAPÍTULO" if estado.get("nuevo") else ""
-    if not marca and sid in seguidas:
-        marca = "AL DÍA" if estado and not estado.get("pendientes") else "EN SEGUIMIENTO"
-    return {"destacado": marca, "nuevo": "1" if estado.get("nuevo") else "",
-            "seguida": marca if not estado.get("nuevo") else "", "label": s.get("name") or s.get("original_name") or "?", "plot": s.get("overview", ""),
+    datos = (nov or {}).get(sid) or {}
+    estado = novedades.estado_vista(datos) if sid in seguidas else ""
+    marca = novedades.ESTADOS_VISTA.get(estado, "En seguimiento" if sid in seguidas else "")
+    nombre = s.get("name") or s.get("original_name") or "?"
+    return {"destacado": marca, "nuevo": "1" if estado == "nuevo" else "",
+            "seguida": marca if estado != "nuevo" else "", "label": nombre,
+            "label2": _info(nombre, marca), "plot": s.get("overview", ""),
             "poster": _img(s.get("poster_path")), "fanart": _img(s.get("backdrop_path"), "w1280"),
             "thumb": _img(s.get("backdrop_path"), "w780"),
             "info": _info(_anio(s.get("first_air_date")), _nota(s.get("vote_average")), "Serie"),
@@ -157,7 +158,19 @@ def datos_pestana(perfil, t, url, pestana, filtrar_peliculas=lambda pelis: pelis
     if pestana == "series":
         seguidas = seguimiento.leer(perfil)
         nov = novedades.leer(perfil)
-        return {fid: [elemento_serie(x, url, seguidas, nov) for x in crudo.get(fid, [])] for fid, _, _ in filas}
+        resultado = {fid: [elemento_serie(x, url, seguidas, nov) for x in crudo.get(fid, [])] for fid, _, _ in filas}
+        orden = {estado: n for n, estado in enumerate(novedades.ESTADOS_VISTA)}
+        recientes = sorted(seguidas.items(), key=lambda par: (
+            orden.get(novedades.estado_vista(nov.get(par[0]) or {}), len(orden)), -par[1].get("fecha", 0)))
+        resultado[101] = [
+            elemento_serie({"id": sid, "name": d.get("titulo"), "original_name": d.get("original"),
+                            "first_air_date": str(d.get("anio") or ""), "poster_path": d.get("poster"),
+                            "backdrop_path": d.get("fanart")}, url, seguidas, nov)
+            for sid, d in recientes
+        ]
+        for tarjeta in resultado[101]:
+            tarjeta["thumb"] = tarjeta["thumb"] or tarjeta["poster"]
+        return resultado
     hacer = elemento_pelicula
     return {fid: [hacer(x, url) for x in crudo.get(fid, [])] for fid, _, _ in filas}
 
@@ -165,7 +178,10 @@ def datos_pestana(perfil, t, url, pestana, filtrar_peliculas=lambda pelis: pelis
 def titulos(pestana):
     if pestana == "inicio":
         return dict(FILAS)
-    return {100: "Explorar géneros", **{fid: titulo for fid, titulo, _ in PESTANAS[pestana]}}
+    nombres = {100: "Explorar géneros", **{fid: titulo for fid, titulo, _ in PESTANAS[pestana]}}
+    if pestana == "series":
+        nombres[101] = "Series en seguimiento"
+    return nombres
 
 
 def accesos_generos(pestana, url, logo):
@@ -250,7 +266,7 @@ def menu(url, con_trakt=False):
          ("Buscar", "DefaultAddonsSearch.png", "carpeta", url(accion="buscar")),
          ("Películas", "DefaultMovies.png", "pestana", "peliculas"),
          ("Series", "DefaultTVShows.png", "pestana", "series"),
-         ("Mis series", "DefaultInProgressShows.png", "carpeta", url(accion="seguir")),
+         ("Mis series", "DefaultInProgressShows.png", "carpeta", url(accion="seguir", estado="todos")),
          ("Mi lista", "DefaultFavourites.png", "carpeta", url(accion="favoritas")),
          (TITULO_CINE_LIBRE, "DefaultMovies.png", "carpeta", url(accion="cine_libre")),
          ("Deportes", "DefaultTVShows.png", "carpeta", url(accion="deportes")),

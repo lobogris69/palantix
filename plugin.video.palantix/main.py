@@ -159,15 +159,15 @@ def mis_series():
 
 
 def marca_serie(sid):
-    """Distintivo de una serie en seguimiento: ● NUEVO o «N pendientes»."""
+    """Estado visible en la ficha de una serie en seguimiento."""
     n = mis_novedades().get(str(sid)) or {}
-    if n.get("nuevo"):
-        return color("● NUEVO", VERDE)
-    if n.get("pendientes"):
-        return color("%d pendiente%s" % (n["pendientes"], "" if n["pendientes"] == 1 else "s"), AZUL)
-    if str(sid) in mis_series():
-        return color("AL DÍA" if n else "EN SEGUIMIENTO", AZUL)
-    return ""
+    if str(sid) not in mis_series():
+        return ""
+    estado = novedades.estado_vista(n)
+    if estado == "nuevo":
+        pendientes = n["pendientes"]
+        return color("● NUEVO · %d pendiente%s" % (pendientes, "" if pendientes == 1 else "s"), VERDE)
+    return color(novedades.ESTADOS_VISTA.get(estado, "En seguimiento"), AZUL)
 
 
 def fecha_es(iso):
@@ -617,7 +617,7 @@ def hoy_para_ti():
 
 def favoritas_disponibles():
     _, proveedores = consulta_fuentes(None)
-    confirmadas, pendientes = disponibilidad.filtrar(leer_favoritas(), CACHE, (proveedores, preferencias(), "descubrimiento"))
+    confirmadas, pendientes = disponibilidad.filtrar(leer_favoritas(), CACHE, (proveedores, preferencias()))
     if not confirmadas:
         aviso("Comprobando tus favoritas" if pendientes else "Tu lista aún no tiene fuentes confirmadas")
     for ficha in confirmadas:
@@ -695,7 +695,7 @@ def elegir_juntos_manual(t, dialogo):
 def resultados_juntos(t, generos, minutos, vistas):
     fichas = [f for f in t.elegir_juntos(generos, minutos).get("results", []) if f["id"] not in vistas]
     _, proveedores = consulta_fuentes(None)
-    confirmadas, pendientes = disponibilidad.filtrar(fichas, CACHE, (proveedores, preferencias(), "descubrimiento"))
+    confirmadas, pendientes = disponibilidad.filtrar(fichas, CACHE, (proveedores, preferencias()))
     for ficha in confirmadas[:3]:
         destino, li, es_carpeta = ficha_pelicula(ficha)
         xbmcplugin.addDirectoryItem(HANDLE, destino, li, es_carpeta)
@@ -717,6 +717,7 @@ def menu_peliculas():
 
 
 def menu_series():
+    carpeta("Series en seguimiento", url(accion="seguir", estado="todos"), "DefaultInProgressShows.png")
     carpeta("Capítulos recientes", url(accion="s_capitulos_recientes"))
     carpeta("Tendencias de la semana", url(accion="s_tendencias"))
     carpeta("Populares", url(accion="s_populares"))
@@ -768,7 +769,7 @@ def explorar_catalogo(t, pagina):
     confirmadas, pendientes = set(), set()
     if tipo == "movie":
         _, proveedores = consulta_fuentes(None)
-        resultados, _ = disponibilidad.filtrar(filas, CACHE, (proveedores, preferencias(), "descubrimiento"),
+        resultados, _ = disponibilidad.filtrar(filas, CACHE, (proveedores, preferencias()),
                                                ids_pendientes=pendientes)
         confirmadas = {str(f["id"]) for f in resultados}
         if filtros["fuente"] == "confirmadas":
@@ -921,23 +922,31 @@ def fuentes_episodios(sid, datos, capitulos):
 
 
 def seguir_viendo(t):
-    """Series en seguimiento: primero las que tienen capítulos NUEVOS, luego pendientes y al final las que están al día."""
+    """Muestra las series en seguimiento, con filtros por estado desde la sección Series."""
     if t:
         novedades.refrescar(PERFIL, t, log=log)
         _CACHE.pop("novedades", None)
     xbmcplugin.setContent(HANDLE, "episodes")
-    ocultar = ADDON.getSetting("ocultar_al_dia") != "false"
+    filtro = PARAMS.get("estado", "")
+    ocultar = not filtro and ADDON.getSetting("ocultar_al_dia") != "false"
     nov = mis_novedades()
+    if filtro == "todos":
+        for estado, etiqueta in novedades.ESTADOS_VISTA.items():
+            total = sum(novedades.estado_vista(nov.get(sid) or {}) == estado for sid in mis_series())
+            carpeta("%s (%d)" % (etiqueta, total), url(accion="seguir", estado=estado), "DefaultTVShows.png")
     filas = []
     for sid, d in seguimiento.ordenadas(PERFIL):
         n = nov.get(sid) or {}
-        prioridad = 0 if n.get("nuevo") else (1 if n.get("pendientes") else 2)
+        estado = novedades.estado_vista(n)
+        if filtro in novedades.ESTADOS_VISTA and estado != filtro:
+            continue
+        prioridad = {"nuevo": 0, "al_dia": 1, "terminada": 2}.get(estado, 3)
         filas.append((prioridad, -d.get("fecha", 0), sid, d, n))
     hay = False
-    for prioridad, _, sid, d, n in sorted(filas, key=lambda f: (f[0], f[1])):
+    for _, _, sid, d, n in sorted(filas, key=lambda f: (f[0], f[1])):
         comun = {"id": sid, "titulo": d.get("titulo", ""), "original": d.get("original", ""), "anio": d.get("anio", "")}
         sig = n.get("siguiente")
-        if not sig and prioridad == 2 and ocultar:
+        if not sig and ocultar:
             continue
         if sig:
             cabecera = "%s · %dx%02d. %s" % (d["titulo"], sig["s"], sig["e"], sig["nombre"])
@@ -952,8 +961,11 @@ def seguir_viendo(t):
         else:
             prox = n.get("proximo") or {}
             cola = ("próximo %sx%02d el %s" % (prox["s"], int(prox["e"]), fecha_es(prox["emitido"]))
-                    if prox.get("s") and prox.get("emitido") else ("en emisión" if n.get("en_emision") else "terminada"))
-            li = xbmcgui.ListItem("%s  %s" % (d["titulo"], color("al día · " + cola, GRIS)))
+                    if prox.get("s") and prox.get("emitido") else
+                    novedades.ESTADOS_VISTA.get(novedades.estado_vista(n), "Por comprobar").lower())
+            li = xbmcgui.ListItem("%s  %s" % (d["titulo"], marca_serie(sid)))
+            if prox.get("s") and prox.get("emitido"):
+                li.setLabel("%s · %s" % (li.getLabel(), cola))
             destino, es_carpeta = url(accion="temporadas", **comun), True
             texto = "Has visto hasta el %sx%02d.\nEstado: %s." % (d["s"], int(d["e"]), cola)
         confirmados, en_cola = fuentes_episodios(sid, d, n.get("episodios_pendientes", []))
@@ -990,8 +1002,9 @@ def seguir_viendo(t):
         li.addContextMenuItems(acciones)
         xbmcplugin.addDirectoryItem(HANDLE, destino, li, es_carpeta)
         hay = True
-    if not hay:
-        aviso("No hay capítulos pendientes: las series se apuntan solas al ver un capítulo")
+    if not hay and filtro != "todos":
+        aviso("No hay series en este estado" if filtro else
+              "No hay capítulos pendientes: las series se apuntan solas al ver un capítulo")
     fin_listado("episodes")
 
 
@@ -2023,12 +2036,21 @@ def reproducir():
     barra.create("Palantix", "Buscando fuentes para «%s»..." % nombre)
     fallos = []
     try:
-        buscar, _ = consulta_fuentes(api(obligatoria=False), fallos.append)
+        buscar, proveedores = consulta_fuentes(api(obligatoria=False), fallos.append)
         fuentes = buscar(peli)
     finally:
         barra.close()
 
     pref = preferencias()
+    if peli.tmdb_id:
+        disponible = bool(etiquetas.ordenar(fuentes, **pref))
+        if disponible or (not fallos and (not proveedores[2] or peli.imdb_id)):
+            ident = "%d:%d:%d" % (peli.tmdb_id, peli.temporada, peli.episodio) if episodio else peli.tmdb_id
+            config = (proveedores, pref, "episodios") if episodio else (proveedores, pref)
+            try:
+                disponibilidad.registrar(CACHE, config, ident, disponible)
+            except (OSError, sqlite3.Error):
+                log("No se pudo guardar la comprobación de fuentes")
     subs_serie = ""
     if episodio:
         try:
