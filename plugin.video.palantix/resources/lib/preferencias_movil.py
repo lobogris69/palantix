@@ -6,7 +6,12 @@ import secrets
 from . import preferencias_copia
 
 PAGINA = b"""<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width">
-<title>Preferencias de Palantix</title><h1>Preferencias de Palantix</h1>
+<title>Configurar Palantix</title><h1>Configurar Palantix</h1>
+<ol><li>En la tele, abre Comprobar mi configuraci&oacute;n y prueba el v&iacute;deo directo.</li>
+<li>Elige los idiomas y la calidad en Kodi o importa tus preferencias a continuaci&oacute;n.</li>
+<li>Para vincular Trakt, genera el c&oacute;digo en Kodi y <a href="https://trakt.tv/activate" rel="noreferrer">act&iacute;valo en Trakt</a>.</li>
+<li>Si usas AllDebrid, abre la direcci&oacute;n de vinculaci&oacute;n que indique Kodi.</li></ol>
+<h2>Copiar preferencias</h2>
 <p><a href="preferencias.json" download>Descargar preferencias de esta tele</a></p>
 <label>Importar preferencias en la tele <input id="archivo" type="file" accept=".json"></label>
 <button id="enviar">Enviar a la tele</button><p id="estado"></p>

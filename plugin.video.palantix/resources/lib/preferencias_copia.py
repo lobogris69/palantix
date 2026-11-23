@@ -5,10 +5,11 @@ import re
 BOOLEANAS = (
     "inicio_plataforma", "solo_peliculas_con_fuentes", "recordar_busquedas", "mostrar_etiquetas",
     "solo_idioma", "autoplay", "intro_activo", "siguiente_activo", "aviso_novedades",
+    "inicio_primero_nuevos", "inicio_mostrar_catalogo", "series_sin_destripes",
     "ocultar_al_dia", "comprobar_fuentes_episodios", "auto_actualizar",
 )
 MAX_INDICE = {
-    "idioma_cat": 6, "vista_listados": 3, "orden_listas": 3, "paginas": 2,
+    "modo_visual": 2, "idioma_cat": 6, "vista_listados": 3, "orden_listas": 3, "paginas": 2,
     "color_etiquetas": 6, "idioma_pref": 4, "orden_fuentes": 1, "calidad_max": 2, "subs_modo": 2,
 }
 LIMITES = {"umbral_visto": (50, 95), "siguiente_seg": (10, 120)}

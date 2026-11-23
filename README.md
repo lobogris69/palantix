@@ -34,6 +34,18 @@ A partir de ahí las versiones nuevas llegan solas.
 - Aviso en la tele cuando sale un capítulo nuevo (al arrancar y cada 6 h).
 - **Siguiente capítulo** automático con cuenta atrás al final (se puede cancelar).
 
+**Inicio, avisos y perfiles**
+- En Ajustes → Catálogo puedes priorizar capítulos nuevos, ocultar las
+  recomendaciones y elegir alto contraste o un inicio con menos imágenes.
+- **Avísame cuando tenga fuente** usa las comprobaciones en segundo plano.
+  Los títulos confirmados aparecen en el inicio. Los avisos se guardan en el
+  perfil activo de Kodi.
+- Si Kodi falla al iniciar una reproducción y quedan alternativas, Palantix
+  ofrece abrir el selector de nuevo con el punto de reanudación guardado.
+- **Comprobar mi configuración** permite guardar un informe limitado a estados
+  de conexión y configuración. **Gestionar perfiles de casa** abre los perfiles
+  de Kodi. La cuadrícula de TV requiere un cliente PVR configurado.
+
 **Hoy para ti y reproducción**
 - **Hoy para ti** reúne la reanudación, el seguimiento, las favoritas con fuente
   confirmada y la agenda deportiva. **Elegid algo para ver** recoge el género de
