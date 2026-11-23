@@ -232,7 +232,6 @@ def comprobar_fuentes(revisar_avisos=False):
 
     addon = xbmcaddon.Addon()
     ajustes = addon.getSetting
-    peliculas = ajustes("solo_peliculas_con_fuentes") == "true"
     episodios = ajustes("comprobar_fuentes_episodios") == "true"
     perfil = xbmcvfs.translatePath(addon.getAddonInfo("profile"))
     cache = os.path.join(perfil, "cache")
@@ -281,9 +280,7 @@ def comprobar_fuentes(revisar_avisos=False):
                 xbmcgui.Dialog().notification("Fuente confirmada", titulo, xbmcgui.NOTIFICATION_INFO, 5500)
     if episodios:
         disponibilidad.comprobar_lote(cache, (proveedores, pref, "episodios"), consultar)
-    if peliculas:
-        disponibilidad.comprobar_lote(cache, (proveedores, pref), consultar)
-    disponibilidad.comprobar_lote(cache, (proveedores, pref, "descubrimiento"), consultar)
+    disponibilidad.comprobar_lote(cache, (proveedores, pref), consultar)
 
 
 def main():

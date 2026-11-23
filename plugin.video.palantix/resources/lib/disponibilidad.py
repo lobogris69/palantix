@@ -1,4 +1,4 @@
-"""Índice local de disponibilidad de películas."""
+"""Índice local de disponibilidad de películas y capítulos."""
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from hashlib import sha256
@@ -36,6 +36,7 @@ def filtrar(peliculas, carpeta, configuracion, ids_pendientes=None):
         return [], False
 
     clave = _clave(configuracion)
+    conservar_confirmadas = configuracion[-1] != "avisos"
     ahora = int(time.time())
     candidatos = {str(p["id"]): p for p in peliculas}
     with _abrir(carpeta) as db:
@@ -46,7 +47,8 @@ def filtrar(peliculas, carpeta, configuracion, ids_pendientes=None):
         guardadas = {i: (disponible, caduca) for i, disponible, caduca in filas}
         pendientes = []
         for i, peli in candidatos.items():
-            if guardadas.get(i, (0, 0))[1] <= ahora:
+            disponible, caduca = guardadas.get(i, (0, 0))
+            if caduca <= ahora and not (disponible and conservar_confirmadas):
                 ficha = {k: peli[k] for k in ("id", "title", "original_title", "release_date", "imdb_id", "tmdb_id", "temporada", "episodio") if k in peli}
                 pendientes.append((clave, i, json.dumps(ficha), ahora))
         if pendientes:
@@ -57,9 +59,23 @@ def filtrar(peliculas, carpeta, configuracion, ids_pendientes=None):
     visibles = []
     for peli in peliculas:
         disponible, caduca = guardadas.get(str(peli["id"]), (0, 0))
-        if disponible and caduca + 7 * DIA > ahora:
+        if disponible and (conservar_confirmadas or caduca + 7 * DIA > ahora):
             visibles.append(peli)
     return visibles, bool(pendientes)
+
+
+def _guardar(db, clave, comprobados, ahora):
+    db.executemany("INSERT OR REPLACE INTO peliculas VALUES (?, ?, ?, ?)",
+                   [(clave, i, int(disponible), ahora + (DIA if disponible else 3600))
+                    for i, disponible in comprobados])
+    db.executemany("DELETE FROM pendientes WHERE config = ? AND id = ?", [(clave, i) for i, _ in comprobados])
+    db.execute("INSERT OR REPLACE INTO estado VALUES (?, ?)", (clave, ahora))
+
+
+def registrar(carpeta, configuracion, identificador, disponible):
+    """Anota el resultado de una búsqueda al abrir un título y retira su comprobación pendiente."""
+    with _abrir(carpeta) as db:
+        _guardar(db, _clave(configuracion), [(str(identificador), disponible)], int(time.time()))
 
 
 def comprobar_lote(carpeta, configuracion, consultar):
@@ -70,7 +86,10 @@ def comprobar_lote(carpeta, configuracion, consultar):
     ahora = int(time.time())
     with _abrir(carpeta) as db:
         db.execute("DELETE FROM pendientes WHERE encolada < ?", (ahora - DIA,))
-        db.execute("DELETE FROM peliculas WHERE caduca < ?", (ahora - 7 * DIA,))
+        db.execute("DELETE FROM peliculas WHERE disponible = 0 AND caduca < ?", (ahora - 7 * DIA,))
+        if configuracion[-1] != "avisos":
+            db.execute("DELETE FROM pendientes WHERE config = ? AND id IN "
+                       "(SELECT id FROM peliculas WHERE config = ? AND disponible = 1)", (clave, clave))
         lote = list(db.execute("SELECT id, pelicula FROM pendientes WHERE config = ? ORDER BY rowid LIMIT 4", (clave,)))
     if not lote:
         return
@@ -82,11 +101,12 @@ def comprobar_lote(carpeta, configuracion, consultar):
         return
     ahora = int(time.time())
     with _abrir(carpeta) as db:
-        db.executemany("INSERT OR REPLACE INTO peliculas VALUES (?, ?, ?, ?)",
-                       [(clave, i, int(disponible), ahora + (DIA if disponible else 3600))
-                        for i, disponible in comprobados])
-        db.executemany("DELETE FROM pendientes WHERE config = ? AND id = ?", [(clave, i) for i, _ in comprobados])
-        db.execute("INSERT OR REPLACE INTO estado VALUES (?, ?)", (clave, ahora))
+        db.execute("BEGIN IMMEDIATE")
+        # Una búsqueda al abrir el título puede haber actualizado el resultado mientras esperábamos al proveedor.
+        vigentes = [(i, disponible) for i, disponible in comprobados if db.execute(
+            "SELECT 1 FROM pendientes WHERE config = ? AND id = ?", (clave, i)).fetchone()]
+        if vigentes:
+            _guardar(db, clave, vigentes, ahora)
 
 
 def resumen(carpeta, configuracion):
@@ -96,8 +116,7 @@ def resumen(carpeta, configuracion):
     ahora = int(time.time())
     with _abrir(carpeta) as db:
         disponibles = db.execute(
-            "SELECT count(*) FROM peliculas WHERE config = ? AND disponible = 1 AND caduca > ?",
-            (clave, ahora - 7 * DIA)).fetchone()[0]
+            "SELECT count(*) FROM peliculas WHERE config = ? AND disponible = 1", (clave,)).fetchone()[0]
         pendientes = db.execute("SELECT count(*) FROM pendientes WHERE config = ? AND encolada >= ?",
                                (clave, ahora - DIA)).fetchone()[0]
         ultima = db.execute("SELECT comprobado FROM estado WHERE config = ?", (clave,)).fetchone()

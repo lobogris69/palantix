@@ -12,6 +12,15 @@ import time
 from . import seguimiento
 
 TTL = 6 * 3600
+ESTADOS_VISTA = {"nuevo": "Nuevo", "al_dia": "Al día", "terminada": "Terminada"}
+
+
+def estado_vista(datos):
+    if datos.get("pendientes"):
+        return "nuevo"
+    if not (datos.get("ultimo") or {}).get("e"):
+        return ""
+    return "al_dia" if datos.get("en_emision") else "terminada"
 
 
 def _ruta(perfil):
