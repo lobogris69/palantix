@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<window>
+    <controls>
+        <control type="image">
+            <width>1920</width><height>1080</height>
+            <texture colordiffuse="FF131722">blanco.png</texture>
+        </control>
+        <control type="label">
+            <left>55</left><top>40</top><width>1050</width><height>65</height>
+            <font>font32_title</font><textcolor>FFFFFFFF</textcolor>
+            <label>Guía TV · Palantix</label>
+        </control>
+    </controls>
+</window>

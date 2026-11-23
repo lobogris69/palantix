@@ -238,11 +238,25 @@ def comprobar_fuentes(revisar_avisos=False):
     cache = os.path.join(perfil, "cache")
     avisos = avisos_fuentes.leer(perfil) if revisar_avisos else []
     por_avisar = [f for f, avisado in avisos if not avisado]
-    if not por_avisar and not os.path.isfile(os.path.join(cache, "disponibilidad.sqlite")):
+    ahora = time.time()
+    plataformas = avisos_fuentes.lista_plataformas(perfil, pendientes=True, ahora=ahora) if revisar_avisos else []
+    if not (por_avisar or plataformas) and not os.path.isfile(os.path.join(cache, "disponibilidad.sqlite")):
         return
     clave = tmdb.limpiar_clave(ajustes("tmdb_key"))
     idioma, region = tmdb.idioma_de(ajustes("idioma_cat") or 0)
     cliente = tmdb.TMDB(clave, idioma, region) if clave else None
+    if cliente:
+        for id_aviso, ficha, ids, _ in plataformas:
+            try:
+                datos = cliente.donde_ver(ficha["tipo"], ficha["tmdb_id"])
+                coincide = ", ".join(avisos_fuentes.proveedores_disponibles(datos, ids))
+                espera = 6 * 3600
+            except (OSError, ValueError):
+                coincide, espera = "", 900
+            guardado = avisos_fuentes.registrar_plataforma(perfil, id_aviso, ids, ahora + espera, coincide)
+            if coincide and guardado:
+                xbmcgui.Dialog().notification("Disponible en plataforma", "%s · %s" % (ficha["title"], coincide),
+                                             xbmcgui.NOTIFICATION_INFO, 5500)
     origenes = [l["origen"] for l in mislistas.leer(perfil)]
     _, proveedores = fuentes_catalogo.consulta(cliente, ajustes, origenes, cache, log)
     pref = fuentes_catalogo.preferencias(ajustes)

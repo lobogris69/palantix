@@ -14,7 +14,7 @@ import xbmcgui
 import xbmcplugin
 import xbmcvfs
 
-from resources.lib import ajustes_serie, avisos_fuentes, deportes, disponibilidad, epg, etiquetas, explorar, fuentes_catalogo, listas, preferencias_copia
+from resources.lib import ajustes_serie, avisos_fuentes, perfiles_casa, cuadricula_tv, deportes, disponibilidad, epg, etiquetas, explorar, fuentes_catalogo, listas, preferencias_copia
 from resources.lib import actualizar, debrid, inicio, mislistas, novedades, progreso, seguimiento, subtitulos, trakt
 from resources.lib import tmdb as tmdb_mod
 from resources.lib.providers import Peli
@@ -388,6 +388,36 @@ def accion_donde_ver(li, tipo, tid):
                             url(accion="donde_ver", tipo=tipo, id=tid))])
 
 
+def configurar_aviso_plataforma(t):
+    tipo = "tv" if PARAMS.get("tipo") == "tv" else "movie"
+    titulo = PARAMS.get("titulo") or "Título"
+    proveedores = sorted(t.plataformas(tipo), key=lambda p: (p.get("display_priority", 999), p["provider_name"]))
+    seleccion = xbmcgui.Dialog().multiselect("Plataformas que usas", [p["provider_name"] for p in proveedores])
+    if seleccion:
+        ficha = {"tipo": tipo, "tmdb_id": int(PARAMS["id"]), "title": titulo}
+        avisos_fuentes.plataformas(PERFIL, ficha, [proveedores[n]["provider_id"] for n in seleccion])
+        aviso("Aviso de plataformas guardado")
+    return fin_listado()
+
+
+def lista_avisos_plataforma():
+    registros = avisos_fuentes.lista_plataformas(PERFIL)
+    if not registros:
+        aviso("Crea un aviso desde Dónde ver")
+    for clave, ficha, _, resultado in registros:
+        destino = url(accion="donde_ver", tipo=ficha["tipo"], id=ficha["tmdb_id"])
+        li = xbmcgui.ListItem(ficha["title"] + " · " + (resultado or "Pendiente de disponibilidad"))
+        li.addContextMenuItems([("Quitar aviso", "RunPlugin(%s)" %
+                                url(accion="quitar_aviso_plataforma", id=clave))])
+        xbmcplugin.addDirectoryItem(HANDLE, destino, li, True)
+    return fin_listado()
+
+
+def quitar_aviso_plataforma():
+    avisos_fuentes.quitar_plataformas(PERFIL, PARAMS["id"])
+    xbmc.executebuiltin("Container.Refresh")
+
+
 def donde_ver(t):
     tipo = PARAMS.get("tipo", "movie")
     if tipo not in ("movie", "tv"):
@@ -402,6 +432,8 @@ def donde_ver(t):
                                                 original=ficha.get("original_title", ""), elegir=1), li, False)
     else:
         carpeta("Ver temporadas y fuentes en Kodi", url(accion="temporadas", id=tid, titulo=ficha.get("name", "")))
+    carpeta("Avísame cuando esté en mis plataformas",
+            url(accion="aviso_plataforma", tipo=tipo, id=tid, titulo=ficha.get("title") or ficha.get("name") or ""))
     try:
         datos = t.donde_ver(tipo, tid)
     except (OSError, ValueError):
@@ -456,6 +488,8 @@ def ficha_pelicula(m):
     ])
     acciones_trakt(li, "movies", m["id"])
     accion_donde_ver(li, "movie", m["id"])
+    li.addContextMenuItems([("Visto en un perfil de casa", "RunPlugin(%s)" %
+                            url(accion="perfiles_visto", id=m["id"]))])
     accion_aviso_fuente(li, {"id": str(m["id"]), "tmdb_id": m["id"], "title": titulo,
                             "original_title": m.get("original_title") or "", "release_date": anio})
     destino = url(accion="reproducir", id=m["id"], titulo=titulo,
@@ -573,6 +607,8 @@ def hoy_para_ti():
     carpeta("Continuar películas", url(accion="a_medias"))
     carpeta("Series y próximos capítulos", url(accion="seguir"), "DefaultTVShows.png")
     carpeta("Avisos de disponibilidad", url(accion="lista_avisos_fuentes"))
+    carpeta("Avisos de plataformas", url(accion="lista_avisos_plataforma"))
+    carpeta("Perfiles para elegir juntos", url(accion="perfiles_elegir"))
     carpeta("Ya disponible en tu lista", url(accion="favoritas_disponibles"), "DefaultFavourites.png")
     carpeta("Deportes hoy", url(accion="deportes_hoy"))
     carpeta("Elegid algo para ver", url(accion="elegir_juntos"), "DefaultMovies.png")
@@ -590,8 +626,56 @@ def favoritas_disponibles():
     return fin_listado("movies")
 
 
+def configurar_perfil_elegir(t):
+    dialogo = xbmcgui.Dialog()
+    nombres = [nombre for nombre, _, _ in perfiles_casa.leer(PERFIL)]
+    n = dialogo.select("Perfiles para elegir juntos", ["Crear perfil"] + nombres)
+    if n < 0:
+        return fin_listado()
+    nombre = nombres[n - 1] if n else (dialogo.input("Nombre del perfil") or "").strip()[:24]
+    if not nombre:
+        return fin_listado()
+    generos = t.generos()
+    n = dialogo.select("Género favorito", ["Cualquiera"] + [g["name"] for g in generos])
+    if n < 0:
+        return fin_listado()
+    genero = generos[n - 1]["id"] if n else 0
+    duraciones = (90, 120, 150, 180)
+    n = dialogo.select("Duración máxima", ["Hasta %d min" % d for d in duraciones])
+    if n >= 0:
+        perfiles_casa.guardar(PERFIL, nombre, genero, duraciones[n])
+        aviso("Perfil guardado: " + nombre)
+    return fin_listado()
+
+
+def visto_en_perfil():
+    perfiles = perfiles_casa.leer(PERFIL)
+    dialogo = xbmcgui.Dialog()
+    n = dialogo.select("¿Quién ha visto esta película?", [p[0] for p in perfiles]) if perfiles else -1
+    if n >= 0:
+        estado = dialogo.select("Estado", ["Marcar como vista", "Marcar como no vista"])
+        if estado >= 0:
+            perfiles_casa.marcar(PERFIL, perfiles[n][0], int(PARAMS["id"]), estado == 0)
+            aviso("Estado guardado para " + perfiles[n][0])
+
+
 def elegir_juntos(t):
     dialogo = xbmcgui.Dialog()
+    perfiles = perfiles_casa.leer(PERFIL)
+    if len(perfiles) >= 2:
+        primero = dialogo.select("Primer perfil", [p[0] for p in perfiles])
+        if primero < 0:
+            return fin_listado()
+        segundo = dialogo.select("Segundo perfil", [p[0] for p in perfiles if p != perfiles[primero]])
+        if segundo < 0:
+            return fin_listado()
+        otros = [p for p in perfiles if p != perfiles[primero]]
+        generos, minutos, vistas = perfiles_casa.criterios(PERFIL, perfiles[primero], otros[segundo])
+        return resultados_juntos(t, generos, minutos, vistas)
+    return elegir_juntos_manual(t, dialogo)
+
+
+def elegir_juntos_manual(t, dialogo):
     generos = t.generos()[:12]
     categorias = ["Cualquiera"] + [g["name"] for g in generos]
     elegidos = []
@@ -605,7 +689,11 @@ def elegir_juntos(t):
     seleccion = dialogo.select("Tiempo que tenéis disponible", ["Hasta %d min" % n for n in duraciones])
     if seleccion < 0:
         return fin_listado()
-    fichas = t.elegir_juntos(elegidos, duraciones[seleccion]).get("results", [])[:20]
+    return resultados_juntos(t, elegidos, duraciones[seleccion], set())
+
+
+def resultados_juntos(t, generos, minutos, vistas):
+    fichas = [f for f in t.elegir_juntos(generos, minutos).get("results", []) if f["id"] not in vistas]
     _, proveedores = consulta_fuentes(None)
     confirmadas, pendientes = disponibilidad.filtrar(fichas, CACHE, (proveedores, preferencias(), "descubrimiento"))
     for ficha in confirmadas[:3]:
@@ -1224,6 +1312,7 @@ def menu_deportes():
     carpeta("Detener reproducción", url(accion="deportes_detener"))
     carpeta("Canales en directo", url(accion="deportes_canales"), "DefaultTVShows.png")
     carpeta("Guía TV", url(accion="deportes_epg"), "DefaultTVShows.png")
+    carpeta("Cuadrícula de Palantix", url(accion="deportes_guia_propia"), "DefaultTVShows.png")
     if xbmc.getCondVisibility("System.AddonIsEnabled(pvr.iptvsimple)"):
         carpeta("Cuadrícula de canales de Kodi", url(accion="deportes_cuadricula"), "DefaultTVShows.png")
     reproductor = complemento_ace_stream()
@@ -1240,8 +1329,7 @@ def canales_deportes():
     return fin_listado()
 
 
-def guia_deportes():
-    hora = time.time()
+def datos_guia_deportes(hora):
     try:
         datos = epg.cargar(CACHE, hora)
     except (OSError, EOFError, ValueError, epg.ElementTree.ParseError):
@@ -1267,8 +1355,14 @@ def guia_deportes():
                 canales[cid] = (canales.get(cid, (item["titulo"], enlace))[0], enlace)
                 vistos.add(cid)
 
+    return canales, datos["programas"]
+
+
+def guia_deportes():
+    hora = time.time()
+    canales, programas = datos_guia_deportes(hora)
     for cid, (nombre, enlace) in canales.items():
-        actual, siguiente = epg.ahora_y_despues(datos["programas"].get(cid, []), hora)
+        actual, siguiente = epg.ahora_y_despues(programas.get(cid, []), hora)
         partes = [nombre]
         for etiqueta, programa in (("Ahora", actual), ("Después", siguiente)):
             if programa:
@@ -1286,6 +1380,32 @@ def guia_deportes():
             li.setProperty("IsPlayable", "true")
             xbmcplugin.addDirectoryItem(HANDLE, enlace, li)
     return fin_listado()
+
+
+def guia_cuadricula_palantix():
+    hora = time.time()
+    canales, programas = datos_guia_deportes(hora)
+    xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+    cuadricula_tv.mostrar(ADDON, canales, programas, hora,
+                          ADDON.getSetting("deportes_sin_resultados") != "false", seleccionar_programa)
+
+
+def seleccionar_programa(canal, enlace, inicio, fin, titulo):
+    horario = "%s–%s" % (datetime.fromtimestamp(inicio).strftime("%H:%M"),
+                         datetime.fromtimestamp(fin).strftime("%H:%M"))
+    detalle = "%s · %s · %s" % (canal, horario, titulo)
+    ahora = time.time()
+    if inicio > ahora and titulo != "Sin programación":
+        if xbmcgui.Dialog().yesno(detalle, "¿Quieres un recordatorio cuando empiece?"):
+            programar_recordatorio(datetime.fromtimestamp(inicio).astimezone())
+    elif enlace and inicio <= ahora < fin:
+        if xbmcgui.Dialog().yesno(detalle, "¿Abrir el canal en directo?"):
+            ruta = url(accion="deportes_play", u=enlace) if deportes.es_web(enlace) else enlace
+            xbmc.executebuiltin("PlayMedia(%s)" % ruta)
+            return True
+    else:
+        xbmcgui.Dialog().ok(detalle, "Emisión pasada" if fin <= ahora else "Sin señal configurada")
+    return False
 
 
 def perfil_deportes():
@@ -1403,11 +1523,16 @@ def recordatorio_deporte():
     if segundos <= 0:
         aviso("El evento ya ha comenzado")
     elif xbmcgui.Dialog().yesno("Deportes", "¿Quieres que Kodi te avise cuando empiece el evento?"):
-        minutos, resto = divmod(segundos, 60)
-        xbmc.executebuiltin("AlarmClock(PalantixDeporte%d,Notification(Palantix,Empieza tu evento deportivo,6000),%d:%02d,silent)" %
-                            (inicio.timestamp(), minutos, resto))
-        aviso("Recordatorio programado mientras Kodi esté abierto")
+        programar_recordatorio(inicio)
     return fin_listado()
+
+
+def programar_recordatorio(inicio):
+    segundos = max(1, int((inicio - datetime.now().astimezone()).total_seconds()))
+    minutos, resto = divmod(segundos, 60)
+    xbmc.executebuiltin("AlarmClock(PalantixDeporte%d,Notification(Palantix,Empieza tu evento deportivo,6000),%d:%02d,silent)" %
+                        (inicio.timestamp(), minutos, resto))
+    aviso("Recordatorio programado mientras Kodi esté abierto")
 
 
 def detener_deportes():
@@ -2039,6 +2164,7 @@ SIN_TMDB = {
     "deportes": menu_deportes,
     "deportes_canales": canales_deportes,
     "deportes_epg": guia_deportes,
+    "deportes_guia_propia": guia_cuadricula_palantix,
     "deportes_fuentes": fuentes_deportes,
     "deportes_anadir": anadir_fuente_deportes,
     "deportes_quitar": quitar_fuente_deportes,
@@ -2058,6 +2184,9 @@ SIN_TMDB = {
     "trakt": menu_trakt,
     "ajustes_serie": configurar_serie,
     "hoy_para_ti": hoy_para_ti,
+    "perfiles_visto": visto_en_perfil,
+    "lista_avisos_plataforma": lista_avisos_plataforma,
+    "quitar_aviso_plataforma": quitar_aviso_plataforma,
     "aviso_fuente": guardar_aviso_fuente,
     "lista_avisos_fuentes": lista_avisos_fuentes,
     "quitar_aviso_fuente": quitar_aviso_fuente,
@@ -2109,6 +2238,10 @@ def con_tmdb(t, accion, page):
         explorar_catalogo(t, page)
     elif accion == "explorar_ficha":
         explorar_ficha(t)
+    elif accion == "aviso_plataforma":
+        configurar_aviso_plataforma(t)
+    elif accion == "perfiles_elegir":
+        configurar_perfil_elegir(t)
     elif accion == "donde_ver":
         donde_ver(t)
     elif accion == "seguir":
