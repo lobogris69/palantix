@@ -135,7 +135,7 @@ _mod("xbmcplugin", SORT_METHOD_LABEL=1, SORT_METHOD_VIDEO_YEAR=2, SORT_METHOD_UN
      setResolvedUrl=lambda h, ok, li: (REGISTRO.__setitem__("resuelto", (ok, li.path)), REGISTRO.__setitem__("li", li)))
 
 
-def abrir(consulta=""):
+def abrir(consulta="", pedir_trakt=None):
     REGISTRO.update(items=[], resuelto=None, avisos=[], selector=None)
     del LIS[:]
     sys.argv = ["plugin://plugin.video.palantix/", "1", consulta]
@@ -143,6 +143,9 @@ def abrir(consulta=""):
         del sys.modules[m]
     import resources.lib.tmdb as tm  # TMDB simulado (sin red ni clave real)
     tm.TMDB._get = lambda self, ruta, **p: TMDB_FALSO[ruta]
+    if pedir_trakt:
+        from resources.lib.trakt import Trakt
+        Trakt._pedir = lambda self, metodo, ruta, cuerpo=None: pedir_trakt(metodo, ruta)
     runpy.run_path(os.path.join(RAIZ, "main.py"), run_name="__main__")
     return REGISTRO
 
@@ -536,6 +539,40 @@ class _S:
 
 av = dbr.avisos_caducidad([_S("Real-Debrid", 3), _S("AllDebrid", 40), _S("Premiumize", 0), _S("X", RuntimeError())])
 comprobar("aviso de caducidad solo para las que caducan pronto", av == ["Real-Debrid caduca en 3 días", "Premiumize ha caducado"])
+
+# Una temporada combina marcas de ambos historiales y conserva los huecos.
+sg.quitar(TMP, 100)
+sg.marcar_visto(TMP, dict(m1, e=2))
+AJUSTES.update(trakt_token="sesion-prueba", trakt_activo="true")
+llamadas_historial = []
+
+
+def pedir_historial(metodo, ruta):
+    llamadas_historial.append((metodo, ruta))
+    return 200, [{"show": {"ids": {"tmdb": 100}}, "seasons": [
+        {"number": 1, "episodes": [{"number": 1, "plays": 2}, {"number": 3, "plays": 0}]}
+    ]}]
+
+
+ruta_capitulos = "?accion=capitulos&id=100&s=1&titulo=Ficción"
+abrir(ruta_capitulos, pedir_trakt=pedir_historial)
+comprobar("temporada: muestra episodios vistos en Trakt y en local, sin marcar los pendientes",
+          [li.tag.datos.get("setPlaycount") for li in LIS] == [(1,), (1,), None])
+r = abrir("?accion=seguir&estado=al_dia", pedir_trakt=pedir_historial)
+comprobar("seguimiento: usa los vistos de Trakt y reutiliza el historial recién consultado",
+          len(r["items"]) == 1 and "Al día" in r["items"][0][0]
+          and llamadas_historial == [("GET", "/sync/watched/shows")])
+AJUSTES["trakt_token"] = "otra-sesion"
+
+
+def trakt_no_disponible(metodo, ruta):
+    raise OSError("conexión de prueba")
+
+
+abrir(ruta_capitulos, pedir_trakt=trakt_no_disponible)
+comprobar("si Trakt falla, el historial de otra cuenta no se mezcla con el local",
+          [li.tag.datos.get("setPlaycount") for li in LIS] == [None, (1,), None])
+AJUSTES.update(trakt_token="", trakt_activo="false")
 
 # Índice local: se guarda la disponibilidad y la búsqueda al abrir el título puede actualizarla.
 from resources.lib import disponibilidad as indice  # noqa: E402

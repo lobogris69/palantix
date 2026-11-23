@@ -81,7 +81,7 @@ def estado(t, sid, s, e, fecha_visto, historial=None):
     }
 
 
-def refrescar(perfil, t, forzar=False, log=print):
+def refrescar(perfil, t, forzar=False, log=print, vistos_trakt=None):
     """Recalcula las series en seguimiento caducadas. Devuelve [(titulo, ultimo)] de las que tienen capítulo NUEVO
     que antes no estaba (para avisar)."""
     antes = leer(perfil)
@@ -89,12 +89,14 @@ def refrescar(perfil, t, forzar=False, log=print):
     recien = []
     for sid, d in seguimiento.ordenadas(perfil):
         previo = antes.get(sid)
-        revision = [d.get("s"), d.get("e"), d.get("legado"), d.get("vistos"), d.get("no_vistos"), d.get("fecha")]
+        vistos = (vistos_trakt or {}).get(sid, [])
+        revision = [d.get("s"), d.get("e"), d.get("legado"), d.get("vistos"), d.get("no_vistos"), d.get("fecha"), vistos]
         if not forzar and previo and time.time() - previo.get("comprobado", 0) < TTL \
                 and previo.get("revision") == revision:
             continue
         try:
-            est = estado(t, int(sid), int(d["s"]), int(d["e"]), d.get("fecha"), d)
+            historial = seguimiento.con_historial_trakt(d, vistos)
+            est = estado(t, int(sid), int(d["s"]), int(d["e"]), d.get("fecha"), historial)
         except Exception as ex:
             log("[Palantix] novedades de %s: %s" % (d.get("titulo"), ex))
             continue

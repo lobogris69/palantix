@@ -41,6 +41,14 @@ def esta_visto(datos, s, e):
             or ((int(s), int(e)) <= tuple(limite) and clave not in datos.get("no_vistos", [])))
 
 
+def con_historial_trakt(datos, vistos):
+    """Combina marcas por episodio sin alterar el seguimiento local ni rellenar huecos."""
+    if not vistos:
+        return datos
+    legado = datos.get("legado", (datos.get("s", 0), datos.get("e", 0)))
+    return dict(datos, legado=legado, vistos=frozenset(datos.get("vistos", ())).union(vistos))
+
+
 def marcar_visto(perfil, meta, ahora=None, visto=True):
     if meta.get("tipo") != "episodio" or not meta.get("tmdb"):
         return
