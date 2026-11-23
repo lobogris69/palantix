@@ -135,6 +135,9 @@ class TMDB:
                          with_genres=",".join(map(str, dict.fromkeys(generos))),
                          **{"with_runtime.lte": minutos})
 
+    def plataformas(self, tipo):
+        return self._get("/watch/providers/" + tipo, watch_region=self.region).get("results", [])
+
     def donde_ver(self, tipo, tid):
         return self._get("/%s/%s/watch/providers" % (tipo, tid)).get("results", {}).get(self.region, {})
 

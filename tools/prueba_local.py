@@ -157,7 +157,7 @@ comprobar("menú principal incluye Cine libre y documentales",
 comprobar("menú principal incluye Deportes", any(i[0] == "Deportes" for i in r["items"]))
 r = abrir("?accion=deportes")
 comprobar("Deportes ofrece agenda, canales y fuentes",
-          [i[0] for i in r["items"]] == ["Hoy", "Eventos en directo", "Próximos eventos", "Detener reproducción", "Canales en directo", "Guía TV", "Mis fuentes"])
+          [i[0] for i in r["items"]] == ["Hoy", "Eventos en directo", "Próximos eventos", "Detener reproducción", "Canales en directo", "Guía TV", "Cuadrícula de Palantix", "Mis fuentes"])
 r = abrir("?accion=deportes_canales")
 comprobar("Deportes incorpora Teledeporte", any(i[0] == "Teledeporte" for i in r["items"]))
 cid = "a" * 40

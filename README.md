@@ -34,6 +34,19 @@ A partir de ahí las versiones nuevas llegan solas.
 - Aviso en la tele cuando sale un capítulo nuevo (al arrancar y cada 6 h).
 - **Siguiente capítulo** automático con cuenta atrás al final (se puede cancelar).
 
+**Avisos de plataformas y guías**
+- En **Dónde ver** puedes elegir las plataformas que usas y pedir un aviso cuando
+  haya disponibilidad en tu región. Palantix comprueba suscripciones y opciones
+  gratuitas según los datos de JustWatch vía TMDB.
+- Desde **Hoy para ti → Perfiles para elegir juntos**, guarda el género favorito
+  y la duración máxima de cada persona. Marca las películas que ya vio cada perfil
+  mediante el menú contextual. La selección conjunta aplica ambos géneros, la
+  duración más corta y excluye lo que ambos marcaron como visto.
+- **Deportes → Cuadrícula de Palantix** muestra bloques de tres horas y páginas de
+  cinco canales con datos de dobleM. Permite abrir la emisión activa o recordar
+  una futura. Usa las señales de la Guía TV, incluidos los canales de EKHorus que
+  puedan asociarse con dobleM.
+
 **Inicio, avisos y perfiles**
 - En Ajustes → Catálogo puedes priorizar capítulos nuevos, ocultar las
   recomendaciones y elegir alto contraste o un inicio con menos imágenes.
