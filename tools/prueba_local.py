@@ -125,7 +125,8 @@ _mod("xbmcgui", ListItem=ListItem, NOTIFICATION_INFO=0, Window=_Ventana,
      DialogProgress=lambda: types.SimpleNamespace(create=lambda *a: None, close=lambda: None,
                                                  update=lambda *a: None, iscanceled=lambda: False),
      Dialog=lambda: types.SimpleNamespace(
-         notification=lambda t, m, *a: REGISTRO["avisos"].append(m), ok=lambda *a: None,
+         notification=lambda t, m, *a: REGISTRO["avisos"].append(m),
+         ok=lambda t, m: REGISTRO.setdefault("dialogos", []).append((t, m)),
          input=lambda *a: REGISTRO.get("input", ""), contextmenu=lambda ops: (print("   MENÚ:", ops), REGISTRO.get("menu", 0))[1], select=_seleccionar))
 _mod("xbmcplugin", SORT_METHOD_LABEL=1, SORT_METHOD_VIDEO_YEAR=2, SORT_METHOD_UNSORTED=0,
      addDirectoryItem=lambda h, u, li, isFolder=False: REGISTRO["items"].append((li.label, u)),
@@ -176,6 +177,28 @@ r = abrir(consulta_ace)
 comprobar("Ace Stream sin Horus termina con un fallo controlado", r["resuelto"] == (False, ""))
 visibilidad_original = sys.modules["xbmc"].getCondVisibility
 addon_original = sys.modules["xbmcaddon"].Addon
+try:
+    kodi = sys.modules["xbmc"]
+    condiciones_pvr = {"System.AddonIsEnabled(pvr.iptvsimple)"}
+    kodi.getCondVisibility = lambda c: any(opcion in condiciones_pvr for opcion in c.split(" | "))
+    r = abrir("?accion=deportes")
+    comprobar("Deportes ofrece el acceso nativo con IPTV Simple habilitado",
+              any(i[0] == "Cuadrícula de canales de Kodi" for i in r["items"]))
+    r["builtin"].clear()
+    r = abrir("?accion=deportes_cuadricula")
+    comprobar("sin canales PVR se cierra la espera, se explica el requisito y se indica la guía propia",
+              r["fin"] is False and "no tiene canales" in r["dialogos"][-1][1]
+              and "Cuadrícula de Palantix" in r["dialogos"][-1][1] and not r["builtin"])
+    condiciones_pvr = {"PVR.HasTVChannels"}
+    r = abrir("?accion=deportes")
+    comprobar("Deportes admite canales PVR de cualquier cliente",
+              any(i[0] == "Cuadrícula de canales de Kodi" for i in r["items"]))
+    r = abrir("?accion=deportes_cuadricula")
+    comprobar("con canales PVR se abre la guía nativa",
+              r["fin"] is False and r["builtin"][-1] == "ActivateWindow(TVGuide)")
+finally:
+    sys.modules["xbmc"].getCondVisibility = visibilidad_original
+
 nombre_ace = "Horus"
 ajustes_ace = []
 
