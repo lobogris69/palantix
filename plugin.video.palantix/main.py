@@ -1335,13 +1335,24 @@ def menu_deportes():
     carpeta("Canales en directo", url(accion="deportes_canales"), "DefaultTVShows.png")
     carpeta("Guía TV", url(accion="deportes_epg"), "DefaultTVShows.png")
     carpeta("Cuadrícula de Palantix", url(accion="deportes_guia_propia"), "DefaultTVShows.png")
-    if xbmc.getCondVisibility("System.AddonIsEnabled(pvr.iptvsimple)"):
+    if xbmc.getCondVisibility("PVR.HasTVChannels | System.AddonIsEnabled(pvr.iptvsimple)"):
         carpeta("Cuadrícula de canales de Kodi", url(accion="deportes_cuadricula"), "DefaultTVShows.png")
     reproductor = complemento_ace_stream()
     if reproductor and reproductor.getAddonInfo("name").casefold() == "ekhorus":
         carpeta("Canales de EKHorus", deportes.ruta_catalogo_ekhorus(), "DefaultTVShows.png")
     carpeta("Mis fuentes", url(accion="deportes_fuentes"), "DefaultPlaylist.png")
     return fin_listado()
+
+
+def guia_cuadricula_kodi():
+    if xbmc.getCondVisibility("PVR.HasTVChannels"):
+        return abrir_ventana_kodi("TVGuide")
+
+    fin_listado(ok=False)
+    xbmcgui.Dialog().ok("Cuadrícula de canales de Kodi",
+                        "Kodi todavía no tiene canales de TV cargados. Comprueba que tu cliente PVR "
+                        "tenga canales en la sección TV de Kodi. En Deportes también puedes abrir "
+                        "Cuadrícula de Palantix, que usa la guía propia del complemento.")
 
 
 def canales_deportes():
@@ -2199,7 +2210,7 @@ SIN_TMDB = {
     "deportes_anadir": anadir_fuente_deportes,
     "deportes_quitar": quitar_fuente_deportes,
     "deportes_horus": configurar_horus,
-    "deportes_cuadricula": lambda: abrir_ventana_kodi("TVGuide"),
+    "deportes_cuadricula": guia_cuadricula_kodi,
     "perfiles_kodi": lambda: abrir_ventana_kodi("profiles"),
     "deportes_hoy": lambda: listar_deportes(hoy=True),
     "deportes_eventos": lambda: listar_deportes(modo=PARAMS.get("modo")),
