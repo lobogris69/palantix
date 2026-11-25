@@ -597,6 +597,58 @@ comprobar("si Trakt falla, el historial de otra cuenta no se mezcla con el local
           [li.tag.datos.get("setPlaycount") for li in LIS] == [None, (1,), None])
 AJUSTES.update(trakt_token="", trakt_activo="false")
 
+# Historial: por título, sin Trakt obligatorio y sin marcar series a medias.
+from resources.lib import historial as archivo_vistos  # noqa: E402
+
+notas_pedidas = []
+gancho_historial = archivo_vistos.Historial(
+    perfil=TMP, ajustes=lambda k: AJUSTES.get(k, ""),
+    valorar=lambda titulo: (notas_pedidas.append(titulo), 4)[1])
+peli_vista = {"tipo": "pelicula", "tmdb": 653, "titulo": "Nosferatu", "anio": 1922}
+gancho_historial.al_empezar(peli_vista, None)
+gancho_historial.al_avanzar(peli_vista, None, 40, 100)
+gancho_historial.al_parar(peli_vista, None, False)
+comprobar("historial: una película a medias no se archiva", not archivo_vistos.leer(TMP, "pelicula"))
+gancho_historial.al_avanzar(peli_vista, None, 90, 100)
+gancho_historial.al_parar(peli_vista, None, False)
+gancho_historial.al_valorar(peli_vista, None)
+gancho_historial.al_parar(peli_vista, None, True)
+gancho_historial.al_valorar(peli_vista, None)
+comprobar("historial: terminar o repetir una película conserva una única valoración",
+          [ficha["nota"] for ficha in archivo_vistos.leer(TMP, "pelicula")] == [4]
+          and notas_pedidas == ["Nosferatu"])
+r = abrir("?accion=historial_vistos&tipo=pelicula")
+comprobar("historial: la carpeta muestra estrellas y permite volver a ver la película",
+          r["items"] == [("Nosferatu (1922) · ★★★★ 4/5", r["items"][0][1])]
+          and "accion=reproducir" in r["items"][0][1]
+          and LIS[0].menu[0][0] == "Valorar o cambiar las estrellas")
+REGISTRO["select"] = 3
+abrir("?accion=valorar_visto&tipo=pelicula&id=653&titulo=Nosferatu")
+REGISTRO["select"] = 0
+comprobar("historial: editar estrellas en la carpeta cambia solo la valoración",
+          [ficha["nota"] for ficha in archivo_vistos.leer(TMP, "pelicula")] == [2])
+
+with tempfile.TemporaryDirectory() as perfil_serie:
+    ficha_tmdb = {"status": "Ended", "in_production": False,
+                  "last_episode_to_air": {"season_number": 1, "episode_number": 2},
+                  "seasons": [{"season_number": 1, "episode_count": 2}]}
+    t_historial = types.SimpleNamespace(serie=lambda sid: ficha_tmdb)
+    gh_serie = archivo_vistos.Historial(perfil=perfil_serie, ajustes=lambda k: "false",
+                                         cliente=lambda: t_historial, vistos_trakt=lambda sid: ["1:1"])
+    episodio_final = dict(m1, e=2)
+    gh_serie.al_parar(episodio_final, None, True)
+    comprobar("historial: una serie con capítulos pendientes no se archiva",
+              archivo_vistos.leer(perfil_serie, "serie") == [])
+    sg.marcar_visto(perfil_serie, episodio_final)
+    ficha_tmdb["in_production"] = True
+    gh_serie.al_parar(episodio_final, None, True)
+    comprobar("historial: una serie en producción no se archiva aunque esté al día",
+              archivo_vistos.leer(perfil_serie, "serie") == [])
+    ficha_tmdb["in_production"] = False
+    gh_serie.al_parar(episodio_final, None, True)
+    comprobar("historial: archiva la serie completa cuando coinciden Trakt y el seguimiento local",
+              [(f["titulo"], f["nota"]) for f in archivo_vistos.leer(perfil_serie, "serie")] == [("Ficción", None)])
+
 # Índice local: se guarda la disponibilidad y la búsqueda al abrir el título puede actualizarla.
 from resources.lib import disponibilidad as indice  # noqa: E402
 

@@ -107,10 +107,11 @@ class Reproductor(xbmc.Player):
         self._fin(terminado=True)
 
     def _fin(self, terminado):
-        if self.meta:
-            self._gancho("al_parar", self.meta, self, terminado)
-        self.meta = None
+        meta, self.meta = self.meta, None
         self.siguiente = None
+        if meta:
+            self._gancho("al_parar", meta, self, terminado)
+            self._gancho("al_valorar", meta, self)
 
     def _gancho(self, nombre, *args):
         for g in self.ganchos:

@@ -67,7 +67,8 @@ def elemento_pelicula(m, url):
             "thumb": _img(m.get("backdrop_path"), "w780"),
             "info": _info(_anio(m.get("release_date")), _nota(m.get("vote_average")), "Película"),
             "tipo": "reproducir", "url": url(accion="reproducir", id=m["id"], titulo=m.get("title", ""),
-                                             original=m.get("original_title", ""), anio=_anio(m.get("release_date")))}
+                                             original=m.get("original_title", ""), anio=_anio(m.get("release_date")),
+                                             poster=m.get("poster_path") or "", fondo=m.get("backdrop_path") or "")}
 
 
 def elemento_serie(s, url, seguidas=(), nov=None):
@@ -267,6 +268,7 @@ def menu(url, con_trakt=False):
          ("Películas", "DefaultMovies.png", "pestana", "peliculas"),
          ("Series", "DefaultTVShows.png", "pestana", "series"),
          ("Mis series", "DefaultInProgressShows.png", "carpeta", url(accion="seguir", estado="todos")),
+         ("Historial de vistos", "DefaultInProgressShows.png", "carpeta", url(accion="historial_vistos")),
          ("Mi lista", "DefaultFavourites.png", "carpeta", url(accion="favoritas")),
          (TITULO_CINE_LIBRE, "DefaultMovies.png", "carpeta", url(accion="cine_libre")),
          ("Deportes", "DefaultTVShows.png", "carpeta", url(accion="deportes")),

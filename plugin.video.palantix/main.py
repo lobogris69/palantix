@@ -15,7 +15,7 @@ import xbmcplugin
 import xbmcvfs
 
 from resources.lib import ajustes_serie, avisos_fuentes, perfiles_casa, cuadricula_tv, deportes, disponibilidad, epg, etiquetas, explorar, fuentes_catalogo, listas, preferencias_copia
-from resources.lib import actualizar, debrid, inicio, mislistas, novedades, progreso, seguimiento, subtitulos, trakt
+from resources.lib import actualizar, debrid, historial, inicio, mislistas, novedades, progreso, seguimiento, subtitulos, trakt
 from resources.lib import tmdb as tmdb_mod
 from resources.lib.providers import Peli
 from resources.lib.providers import cine_libre
@@ -456,6 +456,13 @@ def oferta_streaming():
     return fin_listado()
 
 
+def accion_historial(li, tipo, tmdb, titulo, original="", anio="", poster="", fondo="", nuevo=False):
+    destino = url(accion="valorar_visto", tipo=tipo, id=tmdb, titulo=titulo, original=original or "",
+                  anio=anio, poster=poster or "", fondo=fondo or "", nuevo=int(nuevo))
+    etiqueta = "Añadir a vistos y valorar" if nuevo else "Valorar o cambiar las estrellas"
+    li.addContextMenuItems([(etiqueta, "RunPlugin(%s)" % destino)])
+
+
 def ficha_pelicula(m):
     """Convierte un resultado de TMDB (o una favorita guardada) en un elemento reproducible."""
     titulo = m.get("title") or m.get("original_title") or "?"
@@ -481,19 +488,22 @@ def ficha_pelicula(m):
     li.addContextMenuItems([
         ("Ver tráiler", "RunPlugin(%s)" % url(accion="trailer", id=m["id"])),
         ("Elegir fuente", "PlayMedia(%s)" % url(accion="reproducir", id=m["id"], titulo=titulo,
-                                                original=m.get("original_title", ""), anio=anio, elegir=1)),
+                                                original=m.get("original_title", ""), anio=anio, elegir=1,
+                                                poster=m.get("poster_path") or "", fondo=m.get("backdrop_path") or "")),
         ("Quitar de Favoritas" if es_fav else "Añadir a Favoritas",
          "RunPlugin(%s)" % url(accion="fav_quitar" if es_fav else "fav_poner",
                                id=m["id"], datos=json.dumps(guardable))),
     ])
+    accion_historial(li, "pelicula", m["id"], titulo, m.get("original_title"), anio,
+                     m.get("poster_path"), m.get("backdrop_path"), nuevo=True)
     acciones_trakt(li, "movies", m["id"])
     accion_donde_ver(li, "movie", m["id"])
     li.addContextMenuItems([("Visto en un perfil de casa", "RunPlugin(%s)" %
                             url(accion="perfiles_visto", id=m["id"]))])
     accion_aviso_fuente(li, {"id": str(m["id"]), "tmdb_id": m["id"], "title": titulo,
                             "original_title": m.get("original_title") or "", "release_date": anio})
-    destino = url(accion="reproducir", id=m["id"], titulo=titulo,
-                  original=m.get("original_title", ""), anio=anio)
+    destino = url(accion="reproducir", id=m["id"], titulo=titulo, original=m.get("original_title", ""),
+                  anio=anio, poster=m.get("poster_path") or "", fondo=m.get("backdrop_path") or "")
     return destino, li, False
 
 
@@ -518,6 +528,8 @@ def ficha_serie(s):
     marca = marca_serie(s["id"])
     if marca:
         li.setLabel("%s  %s" % (li.getLabel(), marca))
+    accion_historial(li, "serie", s["id"], titulo, s.get("original_name"), anio,
+                     s.get("poster_path"), s.get("backdrop_path"), nuevo=True)
     acciones_trakt(li, "shows", s["id"])
     accion_donde_ver(li, "tv", s["id"])
     li.addContextMenuItems([("Audio y subtítulos de esta serie", "RunPlugin(%s)" %
@@ -593,6 +605,7 @@ def menu():
                     carpeta("%s  %s" % (nombre, color("(%d) · Trakt" % n, GRIS)), url(accion="trakt_lista", id=lid))
             except Exception as e:
                 log("Trakt listas: %s" % e)
+    carpeta("Historial de vistos", url(accion="historial_vistos"), "DefaultInProgressShows.png")
     carpeta("Mis favoritas", url(accion="favoritas"), "DefaultFavourites.png")
     carpeta(cine_libre.TITULO, url(accion="cine_libre"), "DefaultMovies.png")
     carpeta("Deportes", url(accion="deportes"), "DefaultTVShows.png")
@@ -1292,6 +1305,72 @@ def marcar_capitulo():
         except (OSError, ValueError, trakt.TraktError):
             aviso("Guardado en Palantix. Falló la sincronización con Trakt.")
     xbmc.executebuiltin("Container.Refresh")
+
+
+def historial_vistos():
+    tipo = PARAMS.get("tipo")
+    if tipo not in historial.TIPOS:
+        for clave, titulo in historial.TIPOS.items():
+            carpeta(titulo, url(accion="historial_vistos", tipo=clave),
+                    "DefaultMovies.png" if clave == "pelicula" else "DefaultTVShows.png")
+        return fin_listado()
+
+    serie = tipo == "serie"
+    try:
+        if serie:
+            historial.importar_series(PERFIL, mis_series(), mis_novedades())
+        vistos = historial.leer(PERFIL, tipo)
+    except (OSError, sqlite3.Error):
+        aviso("No se pudo leer el historial de vistos")
+        return fin_listado(ok=False)
+    contenido = "tvshows" if serie else "movies"
+    xbmcplugin.setContent(HANDLE, contenido)
+    for ficha in vistos:
+        titulo, nota = ficha["titulo"], ficha["nota"]
+        anio = ficha["anio"]
+        nombre = "%s (%s)" % (titulo, anio) if anio else titulo
+        puntuacion = "%s %d/5" % ("★" * nota, nota) if nota else "Sin valorar"
+        li = xbmcgui.ListItem("%s · %s" % (nombre, puntuacion))
+        li.setArt(_arte({"poster_path": ficha["poster"], "backdrop_path": ficha["fanart"]}))
+        tag = li.getVideoInfoTag()
+        tag.setTitle(nombre + " · " + puntuacion)
+        tag.setMediaType("tvshow" if serie else "movie")
+        tag.setPlaycount(1)
+        if ficha["fecha"]:
+            tag.setPlot("Visto el %s" % time.strftime("%d-%m-%Y", time.localtime(ficha["fecha"])))
+        if nota:
+            tag.setRating(float(2 * nota), 0, "palantix", True)
+        accion_historial(li, tipo, ficha["tmdb"], titulo, ficha["original"], anio,
+                         ficha["poster"], ficha["fanart"])
+        if not serie:
+            li.setProperty("IsPlayable", "true")
+        destino = url(accion="temporadas" if serie else "reproducir", id=ficha["tmdb"], titulo=titulo,
+                      original=ficha["original"], anio=anio, poster=ficha["poster"], fondo=ficha["fanart"])
+        xbmcplugin.addDirectoryItem(HANDLE, destino, li, isFolder=serie)
+    if not vistos:
+        aviso("Aún no hay títulos en este historial")
+    fin_listado()
+    if vistos and xbmc.getSkinDir() == "skin.estuary":
+        xbmc.executebuiltin("Container.SetViewMode(50)")
+
+
+def valorar_visto():
+    meta = {"tipo": PARAMS.get("tipo"), "tmdb": PARAMS.get("id"), "titulo": PARAMS.get("titulo"),
+            "original": PARAMS.get("original"), "anio": PARAMS.get("anio"), "poster": PARAMS.get("poster"),
+            "fanart": PARAMS.get("fondo")}
+    if meta["tipo"] not in historial.TIPOS or not str(meta["tmdb"]).isdigit():
+        return
+    nota = historial.preguntar(meta["titulo"])
+    nuevo = PARAMS.get("nuevo") == "1"
+    if nota is None and not nuevo:
+        return
+    try:
+        historial.registrar(PERFIL, meta, fecha=None if nuevo else 0, nota=nota)
+    except (OSError, sqlite3.Error, ValueError):
+        return aviso("No se pudo guardar el título en el historial")
+    aviso("Valoración guardada" if nota is not None else "Título añadido al historial")
+    if not nuevo:
+        xbmc.executebuiltin("Container.Refresh")
 
 
 def favoritas():
@@ -2221,6 +2300,8 @@ SIN_TMDB = {
     "anios": lambda: anios(PARAMS["destino"]),
     "dejar_seguir": dejar_seguir,
     "marcar_capitulo": marcar_capitulo,
+    "historial_vistos": historial_vistos,
+    "valorar_visto": valorar_visto,
     "a_medias": a_medias,
     "trakt": menu_trakt,
     "ajustes_serie": configurar_serie,

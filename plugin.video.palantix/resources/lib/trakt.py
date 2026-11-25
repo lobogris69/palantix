@@ -324,7 +324,9 @@ class TraktGancho:
             modo = int(self.aj.get("trakt_valorar") or 1)
         except ValueError:
             modo = 1
-        if pct >= self.VISTO and toca_preguntar(modo):
+        valora_palantix = meta.get("valoracion_titulo") or (
+            meta.get("tipo") == "pelicula" and self.aj.get("valorar_al_terminar") != "false")
+        if not valora_palantix and pct >= self.VISTO and toca_preguntar(modo):
             nota = self.preguntar(meta)
             if nota:
                 try:
