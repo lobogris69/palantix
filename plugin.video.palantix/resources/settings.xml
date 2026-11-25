@@ -37,6 +37,7 @@
         <setting id="solo_idioma" type="bool" label="Ocultar fuentes en otros idiomas" default="false"/>
         <setting id="calidad_max" type="enum" label="Calidad máxima (baja si tu conexión es lenta)" values="4K|1080p|720p" default="0"/>
         <setting id="autoplay" type="bool" label="Reproducción automática (elige la mejor fuente sin preguntar)" default="false"/>
+        <setting id="valorar_al_terminar" type="bool" label="Pedir una valoración al terminar una película o una serie" default="true"/>
         <setting type="lsep" label="Series"/>
         <setting id="series_sin_destripes" type="bool" label="Ocultar imágenes y sinopsis de capítulos sin ver" default="false"/>
         <setting id="umbral_visto" type="slider" label="Porcentaje del capítulo para marcarlo como visto" default="80" range="50,5,95" option="int"/>

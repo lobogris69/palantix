@@ -12,6 +12,13 @@ from . import ganchos
 VISTO = 0.80  # a partir de este porcentaje el capítulo cuenta como visto
 
 
+def umbral_visto(ajustes):
+    try:
+        return min(95, max(50, int(ajustes("umbral_visto") or 80))) / 100
+    except (ValueError, RuntimeError):
+        return VISTO
+
+
 def _ruta(perfil):
     return os.path.join(perfil, "seguimiento.json")
 
@@ -104,8 +111,7 @@ class Seguimiento:
         self.visto = 0.0
         try:
             import xbmcaddon
-            valor = int(xbmcaddon.Addon().getSetting("umbral_visto") or 80)
-            self.umbral = min(95, max(50, valor)) / 100
+            self.umbral = umbral_visto(xbmcaddon.Addon().getSetting)
         except (ImportError, AttributeError, RuntimeError, ValueError):
             self.umbral = VISTO
 

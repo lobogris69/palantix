@@ -128,7 +128,7 @@ comprobar("trakt: añadir una serie a pendientes usa su id de TMDB",
           vistas_t[-1] == ("POST", "/sync/watchlist", {"shows": [{"ids": {"tmdb": 1399}}]}))
 
 # gancho: scrobble al empezar y parar, y nota al terminar
-aj2 = Aj(trakt_client_id="C", trakt_client_secret="S", trakt_token="T", trakt_activo="true", trakt_valorar="2")
+aj2 = Aj(trakt_client_id="C", trakt_client_secret="S", trakt_token="T", trakt_activo="true", trakt_valorar="2", valorar_al_terminar="false")
 notas = []
 g = trakt.TraktGancho(aj2, preguntar=lambda meta: 9, log=lambda m: None)
 llamadas = []
@@ -155,6 +155,12 @@ aj2.set("trakt_activo", "true")
 g.al_empezar(meta, None)
 g.al_parar(meta, None, True)
 comprobar("trakt recién activado funciona sin reiniciar el servicio", llamadas == [("start", 0), ("stop", 100)])
+notas.clear()
+aj2.set("valorar_al_terminar", "true")
+g.al_parar(meta, None, True)
+g.al_parar(dict(meta, tipo="episodio", s=1, e=8, valoracion_titulo=True), None, True)
+comprobar("Trakt conserva el scrobble sin duplicar la pregunta local de valoración",
+          notas == [] and llamadas[-2:] == [("stop", 100), ("stop", 100)])
 comprobar("trakt: «a veces» pregunta 1 de cada 3", trakt.toca_preguntar(1, lambda: 0.1) and not trakt.toca_preguntar(1, lambda: 0.9))
 
 try:
@@ -249,7 +255,7 @@ comprobar("inicio: la segunda vez abre al instante (catálogo en caché, sin ped
 filas = inicio.datos_filas(tempfile.mkdtemp(), None, url)
 comprobar("inicio: sin clave de TMDB no se rompe (filas vacías)", all(v == [] for v in filas.values()))
 comprobar("inicio: menú lateral con Buscar, Películas, Series... y Menú clásico",
-          [m[0] for m in inicio.menu(url)] == ["Inicio", "Hoy para ti", "Buscar", "Películas", "Series", "Mis series", "Mi lista",
+          [m[0] for m in inicio.menu(url)] == ["Inicio", "Hoy para ti", "Buscar", "Películas", "Series", "Mis series", "Historial de vistos", "Mi lista",
                                                 "Cine libre y documentales", "Deportes", "Mis listas", "Ajustes", "Actualizar", "Menú clásico", "Salir"])
 
 # ---------------------------------------------------------------- pestañas Películas y Series

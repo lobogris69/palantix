@@ -41,9 +41,9 @@ def _guardar(perfil, datos):
         json.dump(datos, f, ensure_ascii=False)
 
 
-def estado(t, sid, s, e, fecha_visto, historial=None):
+def estado(t, sid, s, e, fecha_visto, historial=None, *, serie=None, detalle=True):
     """Calcula los capítulos emitidos que quedan pendientes, incluidos los saltados."""
-    serie = t.serie(sid)
+    serie = t.serie(sid) if serie is None else serie
     ultimo = serie.get("last_episode_to_air") or {}
     prox = serie.get("next_episode_to_air") or {}
     ult = (int(ultimo.get("season_number") or 0), int(ultimo.get("episode_number") or 0))
@@ -55,7 +55,7 @@ def estado(t, sid, s, e, fecha_visto, historial=None):
         restantes.extend((temp, ep) for ep in range(1, hasta + 1) if not seguimiento.esta_visto(historial, temp, ep))
 
     siguiente = None
-    if restantes:
+    if restantes and detalle:
         temp, ep = restantes[0]
         try:
             episodios = t.temporada(sid, temp).get("episodes", [])
@@ -81,6 +81,10 @@ def estado(t, sid, s, e, fecha_visto, historial=None):
     }
 
 
+def revision_local(datos):
+    return [datos.get(k) for k in ("s", "e", "legado", "vistos", "no_vistos", "fecha")]
+
+
 def refrescar(perfil, t, forzar=False, log=print, vistos_trakt=None):
     """Recalcula las series en seguimiento caducadas. Devuelve [(titulo, ultimo)] de las que tienen capítulo NUEVO
     que antes no estaba (para avisar)."""
@@ -90,7 +94,7 @@ def refrescar(perfil, t, forzar=False, log=print, vistos_trakt=None):
     for sid, d in seguimiento.ordenadas(perfil):
         previo = antes.get(sid)
         vistos = (vistos_trakt or {}).get(sid, [])
-        revision = [d.get("s"), d.get("e"), d.get("legado"), d.get("vistos"), d.get("no_vistos"), d.get("fecha"), vistos]
+        revision = revision_local(d) + [vistos]
         if not forzar and previo and time.time() - previo.get("comprobado", 0) < TTL \
                 and previo.get("revision") == revision:
             continue

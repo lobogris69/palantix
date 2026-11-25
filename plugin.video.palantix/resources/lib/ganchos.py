@@ -4,6 +4,7 @@ Cada gancho es un objeto con cualquiera de estos métodos:
     al_empezar(meta, reproductor)
     al_avanzar(meta, reproductor, segundo_actual, duracion_total)   # cada segundo
     al_parar(meta, reproductor, terminado)
+    al_valorar(meta, reproductor)                                 # después de todos los al_parar
 `meta` = {"tipo": "pelicula"|"episodio", "tmdb": id (de la peli o de la SERIE), "s": temporada, "e": capítulo, "titulo"}
 """
 
@@ -16,7 +17,7 @@ def registrar(clase):
 
 
 def cargar(log=print):
-    for modulo in ("seguimiento", "progreso", "trakt", "intro"):  # si un módulo no existe o falla, se sigue sin él
+    for modulo in ("seguimiento", "progreso", "historial", "trakt", "intro"):  # si un módulo no existe o falla, se sigue sin él
         try:
             __import__("resources.lib." + modulo)
         except Exception as e:
