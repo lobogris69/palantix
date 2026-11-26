@@ -264,7 +264,7 @@ def datos_filas(perfil, t, url, favoritas=(), filtrar_peliculas=lambda pelis: pe
     return filas
 
 
-def menu(url, con_trakt=False):
+def menu(url, con_trakt=False, con_radio=True):
     m = [("Inicio", "", "pestana", "inicio"),
          ("Hoy para ti", "DefaultInProgressShows.png", "carpeta", url(accion="hoy_para_ti")),
          ("Buscar", "DefaultAddonsSearch.png", "carpeta", url(accion="buscar")),
@@ -277,6 +277,8 @@ def menu(url, con_trakt=False):
          ("TV", "DefaultTVShows.png", "dialogo", url(accion="tv")),
          ("TV internacional", "DefaultTVShows.png", "carpeta", url(accion="tv_internacional")),
          ("Mis listas", "DefaultPlaylist.png", "carpeta", url(accion="listas"))]
+    if con_radio:
+        m.insert(-1, ("Radio", "DefaultMusicSongs.png", "carpeta", url(accion="radio_tdt")))
     if con_trakt:
         m.append(("Trakt", "DefaultAddonService.png", "carpeta", url(accion="trakt")))
     m += [("Ajustes", "DefaultAddonService.png", "ajustes", ""),
@@ -319,7 +321,7 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
             for fid, titulo in FILAS:
                 self.setProperty("fila%d" % fid, titulo)
             m = self.getControl(200)
-            for nombre, icono, tipo, destino in menu(url, con_trakt):
+            for nombre, icono, tipo, destino in menu(url, con_trakt, addon.getSetting("tdtchannels_activo") != "false"):
                 it = xbmcgui.ListItem(nombre)
                 it.setArt({"icon": icono or logo})
                 it.setProperty("tipo", tipo)

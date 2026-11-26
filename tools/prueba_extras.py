@@ -259,7 +259,7 @@ filas = inicio.datos_filas(tempfile.mkdtemp(), None, url)
 comprobar("inicio: sin clave de TMDB no se rompe (filas vacías)", all(v == [] for v in filas.values()))
 comprobar("inicio: menú lateral con Buscar, Películas, Series... y Menú clásico",
           [m[0] for m in inicio.menu(url)] == ["Inicio", "Hoy para ti", "Buscar", "Películas", "Series", "Mis series", "Historial de vistos", "Mi lista",
-                                                "Cine libre y documentales", "TV", "TV internacional", "Mis listas", "Ajustes", "Actualizar", "Menú clásico", "Salir"])
+                                                "Cine libre y documentales", "TV", "TV internacional", "Radio", "Mis listas", "Ajustes", "Actualizar", "Menú clásico", "Salir"])
 
 # ---------------------------------------------------------------- pestañas Películas y Series
 class TPestanas(TFalso):
