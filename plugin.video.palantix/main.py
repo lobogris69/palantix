@@ -15,7 +15,7 @@ import xbmcplugin
 import xbmcvfs
 
 from resources.lib import ajustes_serie, avisos_fuentes, perfiles_casa, cuadricula_tv, deportes, disponibilidad, epg, etiquetas, explorar, fuentes_catalogo, listas, preferencias_copia
-from resources.lib import actualizar, debrid, historial, inicio, mislistas, novedades, progreso, seguimiento, subtitulos, trakt
+from resources.lib import actualizar, debrid, historial, inicio, mislistas, novedades, progreso, seguimiento, subtitulos, trakt, tv
 from resources.lib import tmdb as tmdb_mod
 from resources.lib.providers import Peli
 from resources.lib.providers import cine_libre
@@ -608,7 +608,8 @@ def menu():
     carpeta("Historial de vistos", url(accion="historial_vistos"), "DefaultInProgressShows.png")
     carpeta("Mis favoritas", url(accion="favoritas"), "DefaultFavourites.png")
     carpeta(cine_libre.TITULO, url(accion="cine_libre"), "DefaultMovies.png")
-    carpeta("Deportes", url(accion="deportes"), "DefaultTVShows.png")
+    carpeta("TV", url(accion="tv"), "DefaultTVShows.png")
+    carpeta("TV internacional", url(accion="tv_internacional"), "DefaultTVShows.png")
     carpeta("Mis listas", url(accion="listas"), "DefaultPlaylist.png")
     carpeta("Ajustes", url(accion="ajustes"), "DefaultAddonService.png")
     carpeta("Actualizar Palantix  " + color("(versión %s)" % ADDON.getAddonInfo("version"), GRIS),
@@ -1028,11 +1029,12 @@ def a_medias():
     pelis = progreso.peliculas(PERFIL)
     candidatos = [dict(d, id=d["tmdb"], title=d["titulo"], original_title=d.get("original"),
                        release_date=str(d.get("anio") or "")) for d in pelis]
-    pelis = peliculas_disponibles(candidatos)
+    pelis = progreso.con_caratulas(peliculas_disponibles(candidatos), api(obligatoria=False), CACHE)
     for d in pelis:
         etiqueta = "%s (%s)" % (d["titulo"], d["anio"]) if d.get("anio") else d["titulo"]
         li = xbmcgui.ListItem("%s  %s" % (etiqueta, color("%s de %s" % (progreso.hhmmss(d["pos"]), progreso.hhmmss(d["total"])), AZUL)))
-        li.setArt({"poster": tmdb_mod.TMDB.imagen(d.get("poster")), "fanart": tmdb_mod.TMDB.imagen(d.get("fanart"), "w1280")})
+        poster = tmdb_mod.TMDB.imagen(d.get("poster")) or tmdb_mod.TMDB.imagen(d.get("fanart"), "w500") or LOGO
+        li.setArt({"poster": poster, "thumb": poster, "fanart": tmdb_mod.TMDB.imagen(d.get("fanart"), "w1280")})
         tag = li.getVideoInfoTag()
         tag.setMediaType("movie")
         tag.setTitle(d["titulo"])
@@ -1403,7 +1405,15 @@ def entrada_deporte(titulo, enlace, poster=""):
     li = xbmcgui.ListItem(titulo)
     li.setArt({"thumb": poster or LOGO, "fanart": FONDO})
     li.setProperty("IsPlayable", "true")
-    xbmcplugin.addDirectoryItem(HANDLE, url(accion="deportes_play", u=enlace), li)
+    xbmcplugin.addDirectoryItem(HANDLE, destino_canal(enlace), li)
+
+
+def destino_canal(enlace):
+    """Abre Horus directamente y evita resolver un plugin desde otro plugin."""
+    horus = deportes.ruta_canal_ekhorus(enlace) or deportes.ruta_horus(enlace)
+    if horus and complemento_ace_stream():
+        return horus
+    return url(accion="deportes_play", u=enlace)
 
 
 def menu_deportes():
@@ -1430,7 +1440,7 @@ def guia_cuadricula_kodi():
     fin_listado(ok=False)
     xbmcgui.Dialog().ok("Cuadrícula de canales de Kodi",
                         "Kodi todavía no tiene canales de TV cargados. Comprueba que tu cliente PVR "
-                        "tenga canales en la sección TV de Kodi. En Deportes también puedes abrir "
+                        "tenga canales en la sección TV de Kodi. En el menú de Palantix también puedes abrir "
                         "Cuadrícula de Palantix, que usa la guía propia del complemento.")
 
 
@@ -1441,33 +1451,57 @@ def canales_deportes():
     return fin_listado()
 
 
-def datos_guia_deportes(hora):
-    try:
-        datos = epg.cargar(CACHE, hora)
-    except (OSError, EOFError, ValueError, epg.ElementTree.ParseError):
-        aviso("No se pudo descargar la guía dobleM")
-        datos = {"nombres": {}, "programas": {}}
-
-    canales = {epg.IDS_PALANTIX.get(nombre, nombre): (nombre, enlace)
-               for nombre, enlace in deportes.CANALES}
+def listas_canales_tv():
+    items = []
     reproductor = complemento_ace_stream()
     if reproductor and reproductor.getAddonInfo("name").casefold() == "ekhorus":
-        ruta = xbmcvfs.translatePath(
-            "special://profile/addon_data/script.module.horus/tv/ekhorus.m3u")
+        ruta = xbmcvfs.translatePath("special://profile/addon_data/script.module.horus/tv/ekhorus.m3u")
         try:
-            exportados = listas.parsear(listas.descargar(ruta))
-        except (OSError, ValueError):
-            exportados = []
-        nombres = epg.indice_nombres(datos)
-        vistos = set()
-        for item in exportados:
-            cid = nombres.get(epg.normalizar(item["titulo"]))
-            enlace = deportes.ruta_canal_ekhorus(item["url"])
-            if cid and cid not in vistos and enlace:
-                canales[cid] = (canales.get(cid, (item["titulo"], enlace))[0], enlace)
-                vistos.add(cid)
+            items.extend(listas.parsear(listas.descargar(ruta), canales=True))
+        except (OSError, ValueError, TypeError, AttributeError):
+            log("La lista exportada de EKHorus no está disponible")
+    for fuente in mislistas.leer(perfil_deportes()):
+        if deportes.ace_id(fuente["origen"]):
+            items.append({"titulo": fuente["nombre"], "url": fuente["origen"], "grupo": "Mis canales", "poster": ""})
+        elif deportes.es_web(fuente["origen"]):
+            try:
+                cargados = listas.cargar(fuente["origen"], CACHE, min(300, ttl_listas()), canales=True)
+                items.extend(dict(item, grupo=fuente["nombre"]) if item["grupo"] == "Sin grupo" else item
+                             for item in cargados)
+            except (OSError, ValueError, TypeError, AttributeError):
+                log("Una lista de TV configurada no está disponible")
+    return [item for item in items if not item.get("inicio")]
 
+
+def datos_guia_deportes(hora):
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        guia = pool.submit(epg.cargar, CACHE, hora)
+        canales_tv = listas_canales_tv()
+        try:
+            datos = guia.result()
+        except (OSError, EOFError, ValueError, epg.ElementTree.ParseError):
+            datos = {"nombres": {}, "programas": {}}
+    canales, _ = tv.preparar(canales_tv, datos)
     return canales, datos["programas"]
+
+
+def tv_internacional():
+    datos = epg.leer_cache(CACHE) or {"nombres": {}}
+    _, grupos = tv.preparar(listas_canales_tv(), datos)
+    grupo = PARAMS.get("grupo")
+    if grupo is None:
+        for nombre in sorted(grupos, key=str.casefold):
+            carpeta("%s (%d)" % (nombre, len(grupos[nombre])), url(accion="tv_internacional", grupo=nombre),
+                    "DefaultTVShows.png")
+        if not grupos:
+            carpeta("Mis fuentes de TV", url(accion="deportes_fuentes"), "DefaultPlaylist.png")
+            aviso("Añade una lista de canales internacionales en Mis fuentes de TV")
+    else:
+        for item in sorted(grupos.get(grupo, []), key=lambda item: item["titulo"].casefold()):
+            entrada_deporte(item["titulo"], item["url"], item["poster"])
+    return fin_listado()
 
 
 def guia_deportes():
@@ -1485,35 +1519,39 @@ def guia_deportes():
         if not enlace:
             partes.append("Sin señal directa")
             xbmcplugin.addDirectoryItem(HANDLE, "", xbmcgui.ListItem(" · ".join(partes)))
-        elif deportes.es_web(enlace):
-            entrada_deporte(" · ".join(partes), enlace)
         else:
-            li = xbmcgui.ListItem(" · ".join(partes))
-            li.setProperty("IsPlayable", "true")
-            xbmcplugin.addDirectoryItem(HANDLE, enlace, li)
+            entrada_deporte(" · ".join(partes), enlace)
     return fin_listado()
 
 
 def guia_cuadricula_palantix():
     hora = time.time()
     canales, programas = datos_guia_deportes(hora)
-    xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-    cuadricula_tv.mostrar(ADDON, canales, programas, hora,
-                          ADDON.getSetting("deportes_sin_resultados") != "false", seleccionar_programa)
+    if HANDLE >= 0:
+        fin_listado(ok=False)
+    opciones = cuadricula_tv.mostrar(ADDON, canales, programas, hora,
+                                    ADDON.getSetting("deportes_sin_resultados") != "false", seleccionar_programa)
+    if opciones:
+        xbmc.executebuiltin("ActivateWindow(Videos,%s,return)" % url(accion="deportes"))
 
 
 def seleccionar_programa(canal, enlace, inicio, fin, titulo):
+    if not titulo:
+        if enlace:
+            xbmc.executebuiltin("PlayMedia(%s)" % destino_canal(enlace))
+            return True
+        xbmcgui.Dialog().ok(canal, "Sin señal configurada")
+        return False
     horario = "%s–%s" % (datetime.fromtimestamp(inicio).strftime("%H:%M"),
                          datetime.fromtimestamp(fin).strftime("%H:%M"))
     detalle = "%s · %s · %s" % (canal, horario, titulo)
     ahora = time.time()
-    if inicio > ahora and titulo != "Sin programación":
+    if inicio > ahora:
         if xbmcgui.Dialog().yesno(detalle, "¿Quieres un recordatorio cuando empiece?"):
             programar_recordatorio(datetime.fromtimestamp(inicio).astimezone())
     elif enlace and inicio <= ahora < fin:
         if xbmcgui.Dialog().yesno(detalle, "¿Abrir el canal en directo?"):
-            ruta = url(accion="deportes_play", u=enlace) if deportes.es_web(enlace) else enlace
-            xbmc.executebuiltin("PlayMedia(%s)" % ruta)
+            xbmc.executebuiltin("PlayMedia(%s)" % destino_canal(enlace))
             return True
     else:
         xbmcgui.Dialog().ok(detalle, "Emisión pasada" if fin <= ahora else "Sin señal configurada")
@@ -1536,7 +1574,7 @@ def fuentes_deportes():
         li.addContextMenuItems([("Quitar fuente", "RunPlugin(%s)" % url(accion="deportes_quitar", u=origen))])
         if deportes.ace_id(origen):
             li.setProperty("IsPlayable", "true")
-            xbmcplugin.addDirectoryItem(HANDLE, url(accion="deportes_play", u=origen), li)
+            xbmcplugin.addDirectoryItem(HANDLE, destino_canal(origen), li)
         else:
             xbmcplugin.addDirectoryItem(HANDLE, url(accion="deportes_lista", u=origen), li, isFolder=True)
     return fin_listado()
@@ -1660,7 +1698,7 @@ def complemento_ace_stream(avisar=False):
             pass
     if avisar:
         xbmcgui.Dialog().ok("Ace Stream", "Instala y activa Horus o EKHorus en Kodi y configura el motor Ace Stream "
-                            "para tu dispositivo. Después puedes gestionar tus enlaces en Deportes → Mis fuentes.")
+                            "para tu dispositivo. Después puedes gestionar tus enlaces en TV → Opciones de TV → Mis fuentes.")
     return None
 
 
@@ -1672,7 +1710,7 @@ def configurar_horus():
 
 def reproducir_deporte():
     enlace = PARAMS.get("u", "")
-    horus = deportes.ruta_horus(enlace)
+    horus = deportes.ruta_canal_ekhorus(enlace) or deportes.ruta_horus(enlace)
     if horus:
         ruta = horus if complemento_ace_stream(avisar=True) else ""
     else:
@@ -2281,6 +2319,8 @@ SIN_TMDB = {
     "fav_quitar": lambda: fav_cambiar(False),
     "listas": mis_listas,
     "cine_libre": catalogo_cine_libre,
+    "tv": guia_cuadricula_palantix,
+    "tv_internacional": tv_internacional,
     "deportes": menu_deportes,
     "deportes_canales": canales_deportes,
     "deportes_epg": guia_deportes,

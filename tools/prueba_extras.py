@@ -221,6 +221,7 @@ class TFalso:
                              "poster_path": "/p%d.jpg" % i, "backdrop_path": "/f%d.jpg" % i, "overview": "Sinopsis"}
                             for i in range(25)]}
 
+    def detalle(self, sid): return {"poster_path": "/reparada.jpg"}
     def tendencias(self, p): return self._r(1000)
     def s_tendencias(self, p): return self._r(2000)
     def s_capitulos_recientes(self, p): return self._r(8000)
@@ -235,6 +236,8 @@ sg.marcar_visto(PERF, {"tipo": "episodio", "tmdb": 200, "s": 2, "e": 3, "titulo"
 nv._guardar(PERF, {"100": {"pendientes": 2, "nuevo": True, "siguiente": {"s": 1, "e": 2, "nombre": "Dos", "still": "/st.jpg"}},
                    "200": {"pendientes": 1, "nuevo": False, "siguiente": {"s": 2, "e": 4, "nombre": "Cuatro"}}})
 filas = inicio.datos_filas(PERF, TFalso(), url, favoritas=[{"id": 9, "title": "Favorita", "release_date": "2000-01-01"}])
+comprobar("inicio: recupera una carátula faltante en una película guardada antes del cambio",
+          filas[101][0]["poster"].endswith("/reparada.jpg") and filas[101][0]["thumb"].endswith("/n.jpg"))
 comprobar("inicio: «Continuar viendo» con la peli a medias y la serie sin novedad",
           [e["label"] for e in filas[101]] == ["Nosferatu", "Otra"] and filas[101][0]["resume"] == (1200, 5640))
 comprobar("inicio: «Nuevos capítulos» con la serie que tiene NUEVO", [e["label"] for e in filas[102]] == ["Ficción"]
@@ -256,7 +259,7 @@ filas = inicio.datos_filas(tempfile.mkdtemp(), None, url)
 comprobar("inicio: sin clave de TMDB no se rompe (filas vacías)", all(v == [] for v in filas.values()))
 comprobar("inicio: menú lateral con Buscar, Películas, Series... y Menú clásico",
           [m[0] for m in inicio.menu(url)] == ["Inicio", "Hoy para ti", "Buscar", "Películas", "Series", "Mis series", "Historial de vistos", "Mi lista",
-                                                "Cine libre y documentales", "Deportes", "Mis listas", "Ajustes", "Actualizar", "Menú clásico", "Salir"])
+                                                "Cine libre y documentales", "TV", "TV internacional", "Mis listas", "Ajustes", "Actualizar", "Menú clásico", "Salir"])
 
 # ---------------------------------------------------------------- pestañas Películas y Series
 class TPestanas(TFalso):

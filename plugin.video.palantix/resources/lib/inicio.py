@@ -195,7 +195,8 @@ def accesos_generos(pestana, url, logo):
     return opciones
 
 
-def datos_filas(perfil, t, url, favoritas=(), filtrar_peliculas=lambda pelis: pelis, ocultar_destripes=False):
+def datos_filas(perfil, t, url, favoritas=(), filtrar_peliculas=lambda pelis: pelis,
+                ocultar_destripes=False, mostrar_catalogo=True):
     """{id_fila: [elementos]} listos para pintar."""
     filas = {fid: [] for fid, _ in FILAS}
     nov = novedades.leer(perfil)
@@ -203,17 +204,19 @@ def datos_filas(perfil, t, url, favoritas=(), filtrar_peliculas=lambda pelis: pe
 
     # 101 Continuar viendo: películas a medias + siguiente capítulo de las series empezadas
     a_medias = progreso.peliculas(perfil)[:10]
-    tm = _tmdb_cache(perfil, t) if t else {}
+    tm = _tmdb_cache(perfil, t) if t and mostrar_catalogo else {}
     pelis = [m for grupo in ("tendencias", "valoradas", "streaming") for m in tm.get(grupo, [])]
     pelis.extend(favoritas)
     pelis.extend(dict(id=d["tmdb"], title=d["titulo"], original_title=d.get("original"),
                       release_date=str(d.get("anio") or "")) for d in a_medias)
     visibles = {str(m["id"]) for m in filtrar_peliculas(pelis)}
-    for d in (d for d in a_medias if str(d["tmdb"]) in visibles):
+    a_medias = progreso.con_caratulas([d for d in a_medias if str(d["tmdb"]) in visibles], t, os.path.join(perfil, "cache"))
+    for d in a_medias:
         quedan = int((d["total"] - d["pos"]) // 60)
         filas[101].append({
             "label": d["titulo"], "label2": "%s · quedan %d min" % (d["titulo"], quedan),
-            "poster": _img(d.get("poster")), "fanart": _img(d.get("fanart"), "w1280"), "thumb": _img(d.get("fanart"), "w780"),
+            "poster": _img(d.get("poster")), "fanart": _img(d.get("fanart"), "w1280"),
+            "thumb": _img(d.get("fanart"), "w780") or _img(d.get("poster")),
             "plot": "Te quedaste en el %s." % progreso.hhmmss(d["pos"]),
             "info": _info(str(d.get("anio") or ""), "Película", "%d %%" % (100 * d["pos"] // max(1, d["total"]))),
             "resume": (d["pos"], d["total"]), "destacado": "A MEDIAS", "a_medias": "1", "tipo": "reproducir",
@@ -271,7 +274,8 @@ def menu(url, con_trakt=False):
          ("Historial de vistos", "DefaultInProgressShows.png", "carpeta", url(accion="historial_vistos")),
          ("Mi lista", "DefaultFavourites.png", "carpeta", url(accion="favoritas")),
          (TITULO_CINE_LIBRE, "DefaultMovies.png", "carpeta", url(accion="cine_libre")),
-         ("Deportes", "DefaultTVShows.png", "carpeta", url(accion="deportes")),
+         ("TV", "DefaultTVShows.png", "dialogo", url(accion="tv")),
+         ("TV internacional", "DefaultTVShows.png", "carpeta", url(accion="tv_internacional")),
          ("Mis listas", "DefaultPlaylist.png", "carpeta", url(accion="listas"))]
     if con_trakt:
         m.append(("Trakt", "DefaultAddonService.png", "carpeta", url(accion="trakt")))
@@ -292,8 +296,9 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
     def li(e):
         item = xbmcgui.ListItem(e["label"], e.get("label2", ""))
         fanart = "" if addon.getSetting("modo_visual") == "2" else e.get("fanart", "")
-        item.setArt({"poster": e.get("poster", ""), "fanart": fanart, "thumb": e.get("thumb", ""),
-                     "icon": e.get("icon", "")})
+        sustituto = logo if e.get("a_medias") else ""
+        item.setArt({"poster": e.get("poster") or sustituto, "fanart": fanart,
+                     "thumb": e.get("thumb") or sustituto, "icon": e.get("icon", "")})
         tag = item.getVideoInfoTag()
         tag.setPlot(e.get("plot", ""))
         if e.get("resume"):
@@ -335,8 +340,9 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
             try:
                 if pestana == "inicio":
                     mostrar_catalogo = addon.getSetting("inicio_mostrar_catalogo") != "false"
-                    filas = datos_filas(perfil, t if mostrar_catalogo else None, url, favoritas, filtrar_peliculas,
-                                        ocultar_destripes=addon.getSetting("series_sin_destripes") == "true")
+                    filas = datos_filas(perfil, t, url, favoritas, filtrar_peliculas,
+                                        ocultar_destripes=addon.getSetting("series_sin_destripes") == "true",
+                                        mostrar_catalogo=mostrar_catalogo)
                     if not mostrar_catalogo:
                         filas[111] = []
                 elif t:
@@ -389,7 +395,7 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
                 xbmc.executebuiltin("ActivateWindow(Home)")
             elif tipo == "ajustes":
                 addon.openSettings()
-            elif tipo == "reproducir" or "accion=actualizar" in destino:
+            elif tipo in ("reproducir", "dialogo") or "accion=actualizar" in destino:
                 xbmc.executebuiltin("PlayMedia(%s)" % destino if tipo == "reproducir" else "RunPlugin(%s)" % destino)
             elif destino:
                 xbmc.executebuiltin("ActivateWindow(Videos,%s,return)" % destino)

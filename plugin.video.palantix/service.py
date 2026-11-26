@@ -45,6 +45,7 @@ class Reproductor(xbmc.Player):
         self.meta = None
         self.siguiente = None
         self.reintento = ""
+        self.error_pendiente = None
         self.ofrecido = False
         self.ganchos = []  # módulos opcionales: objetos con al_empezar/al_avanzar/al_parar
         try:
@@ -56,6 +57,7 @@ class Reproductor(xbmc.Player):
     # --- eventos de Kodi
     def onAVStarted(self):
         self.reintento = ""
+        self.error_pendiente = None
         self.meta = propiedad_json("palantix.meta")
         self.siguiente = propiedad_json("palantix.siguiente")
         self.ofrecido = False
@@ -89,11 +91,22 @@ class Reproductor(xbmc.Player):
         solicitud = propiedad_json("palantix.meta") or {}
         reciente = time.time() - solicitud.get("inicio_solicitado", 0) < 90
         if self.meta or reciente:
-            VENTANA.setProperty("palantix.ultimo_error", "Error de Kodi al continuar el vídeo" if self.meta
-                                else "Error de Kodi al iniciar el vídeo")
+            # Kodi puede comunicar el error del intento anterior durante un cambio de canal.
+            self.error_pendiente = (time.monotonic() + 3, solicitud, bool(self.meta), reciente)
+
+    def comprobar_error(self):
+        if self.error_pendiente is None or time.monotonic() < self.error_pendiente[0]:
+            return
+        _, solicitud, continuacion, reciente = self.error_pendiente
+        self.error_pendiente = None
+        nueva = propiedad_json("palantix.meta") or {}
+        if self.isPlayingVideo() or nueva.get("inicio_solicitado") != solicitud.get("inicio_solicitado"):
+            return
+        VENTANA.setProperty("palantix.ultimo_error", "Error de Kodi al continuar el vídeo" if continuacion
+                            else "Error de Kodi al iniciar el vídeo")
         if reciente and solicitud.get("reintento"):
             self.reintento = solicitud["reintento"]
-        elif self.meta or reciente:
+        else:
             xbmcgui.Dialog().notification("Palantix", "Kodi no pudo abrir o continuar el vídeo. Prueba otra fuente.",
                                          xbmcgui.NOTIFICATION_WARNING, 7000)
         VENTANA.clearProperty("palantix.meta")
@@ -122,6 +135,7 @@ class Reproductor(xbmc.Player):
 
     # --- cada segundo
     def vigilar(self):
+        self.comprobar_error()
         if self.reintento and not self.isPlayingVideo():
             destino = self.reintento
             self.reintento = ""

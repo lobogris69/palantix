@@ -80,17 +80,17 @@ def _entero(v):
         return 0
 
 
-def _normaliza_item(d):
+def _normaliza_item(d, canales=False):
     titulo = (d.get("serie") or d.get("titulo") or d.get("title") or "").strip()
     temporada = _num(d.get("temporada") or d.get("season"))
     episodio = _num(d.get("episodio") or d.get("episode"))
     m = _SXE.search(titulo)
-    if m:  # «Serie S01E02» o «Serie 1x02» en el título
+    if m and not canales:  # «Serie S01E02» o «Serie 1x02» en el título
         titulo = titulo[:m.start()].strip(" -.")
         temporada, episodio = temporada or int(m.group(1) or m.group(3)), episodio or int(m.group(2) or m.group(4))
     anio = _entero(d.get("anio") or d.get("year"))
     m = _ANIO.search(titulo)
-    if m:
+    if m and not canales:
         titulo, anio = titulo[:m.start()].strip(), anio or int(m.group(1))
     return {
         "tipo": "episodio" if temporada and episodio else "pelicula",
@@ -116,6 +116,10 @@ def _normaliza_item(d):
         "resultado_en_titulo": str(d.get("resultado-en-titulo") or d.get("resultado_en_titulo")).lower() in ("true", "1"),
         "inicio": d.get("inicio") or d.get("start") or "",
         "ficha_origen": (d.get("ficha_origen") or "").strip(),
+        **({"tvg_id": str(d.get("tvg-id") or d.get("tvg_id") or "").strip(),
+            "tvg_nombre": str(d.get("tvg-name") or d.get("tvg_nombre") or "").strip(),
+            "pais": str(d.get("tvg-country") or d.get("pais") or d.get("country") or "").strip()}
+           if canales else {}),
     }
 
 
@@ -124,9 +128,8 @@ def _parsear_m3u(texto):
     for linea in texto.splitlines():
         linea = linea.strip()
         if linea.startswith("#EXTINF"):
-            cabecera, _, titulo = linea.partition(",")
-            pendiente = dict(_ATRIB.findall(cabecera))
-            pendiente["titulo"] = titulo
+            partes = re.match(r'((?:[^",]|"[^"]*")*),(.*)$', linea)
+            pendiente = dict(_ATRIB.findall(partes[1]), titulo=partes[2]) if partes else None
         elif linea and not linea.startswith("#") and pendiente is not None:
             pendiente["url"] = linea
             items.append(pendiente)
@@ -134,20 +137,21 @@ def _parsear_m3u(texto):
     return items
 
 
-def parsear(texto, eventos=False):
+def parsear(texto, eventos=False, canales=False):
     t = texto.lstrip("﻿").strip()
     if t.startswith(("{", "[")):
         datos = json.loads(t)
         if isinstance(datos, dict):
-            crudos = datos.get("peliculas") or datos.get("movies") or (datos.get("eventos") if eventos else None) or []
+            crudos = ((datos.get("canales") if canales else None) or datos.get("peliculas") or datos.get("movies")
+                      or (datos.get("eventos") if eventos else None) or [])
         else:
             crudos = datos
     elif t.startswith("#EXTM3U") or "#EXTINF" in t[:2000]:
         crudos = _parsear_m3u(t)
     else:
         raise ValueError("Formato de lista no reconocido (usa JSON o M3U)")
-    return [i for i in (_normaliza_item(d) for d in crudos) if i["titulo"] and (i["url"] or (eventos and i["inicio"]))]
+    return [i for i in (_normaliza_item(d, canales=canales) for d in crudos) if i["titulo"] and (i["url"] or (eventos and i["inicio"]))]
 
 
-def cargar(origen, cache_dir=None, ttl=3600, eventos=False):
-    return parsear(descargar(origen, cache_dir, ttl), eventos=eventos)
+def cargar(origen, cache_dir=None, ttl=3600, eventos=False, canales=False):
+    return parsear(descargar(origen, cache_dir, ttl), eventos=eventos, canales=canales)

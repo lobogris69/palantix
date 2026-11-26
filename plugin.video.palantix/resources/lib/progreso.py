@@ -3,11 +3,13 @@
 progreso.json en el perfil: {clave: {tipo, tmdb, s, e, titulo, original, anio, poster, fanart, pos, total, fecha}}
 clave = "p:<tmdb>" (película) o "e:<tmdb serie>:<s>:<e>" (capítulo)
 """
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
+import sqlite3
 import time
 
-from . import ganchos
+from . import explorar, ganchos
 
 MINIMO_SEG = 60     # menos de un minuto visto: no merece la pena apuntarlo
 TERMINADO = 0.90    # a partir de aquí se considera vista entera
@@ -50,6 +52,9 @@ def apuntar(perfil, meta, pos, total, ahora=None):
     if pos < MINIMO_SEG:
         return "nada"
     d = {c: meta.get(c, "") for c in ("tipo", "tmdb", "s", "e", "titulo", "original", "anio", "poster", "fanart")}
+    anterior = datos.get(k, {})
+    for campo in ("poster", "fanart"):
+        d[campo] = d[campo] or anterior.get(campo, "")
     d.update(pos=int(pos), total=int(total), fecha=ahora or time.time())
     datos[k] = d
     _guardar(perfil, datos)
@@ -63,6 +68,25 @@ def de(perfil, meta):
 def peliculas(perfil):
     """Películas a medias, la más reciente primero."""
     return sorted((d for k, d in leer(perfil).items() if k.startswith("p:")), key=lambda d: -d.get("fecha", 0))
+
+
+def con_caratulas(peliculas, t, cache):
+    """Recupera las carátulas que faltan en puntos de reanudación de versiones antiguas."""
+    if t is None or all(d.get("poster") for d in peliculas):
+        return peliculas
+
+    def recuperar(d):
+        if d.get("poster"):
+            return d
+        try:
+            ficha, _ = explorar.cargar(t, cache, "movie", {}, sid=int(d["tmdb"]))
+        except (OSError, ValueError, KeyError, sqlite3.Error):
+            return d
+        return dict(d, poster=ficha.get("poster_path") or "",
+                    fanart=d.get("fanart") or ficha.get("backdrop_path") or "")
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        return list(pool.map(recuperar, peliculas))
 
 
 def quitar(perfil, k):
