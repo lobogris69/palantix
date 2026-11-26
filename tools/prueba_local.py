@@ -435,6 +435,47 @@ comprobar("1x01: deja preparado el 1x02", "e=2" in sig.get("url", "") and sig.ge
 
 import runpy as _rp  # noqa: E402
 servicio = _rp.run_path(os.path.join(RAIZ, "service.py"), run_name="servicio")
+marca_inicio = "palantix.arranque_comprobado"
+kodi = sys.modules["xbmc"]
+arranque = servicio["abrir_al_arrancar"]
+monitor_prueba = types.SimpleNamespace(waitForAbort=lambda segundos: False)
+reproductor_prueba = types.SimpleNamespace(isPlaying=lambda: False)
+try:
+    kodi.getCondVisibility = lambda condicion: condicion == "Window.IsActive(Home)"
+    REGISTRO["builtin"] = []
+    arranque(monitor_prueba, reproductor_prueba)
+    AJUSTES["inicio_automatico"] = "true"
+    arranque(monitor_prueba, reproductor_prueba)
+    comprobar("arranque: desactivado por defecto y activar el ajuste se aplica al próximo arranque",
+              not REGISTRO["builtin"])
+    PROPIEDADES.pop(marca_inicio, None)
+    comprobadas = []
+
+    def cargando_inicio(condicion):
+        if condicion == "Window.IsActive(Home)":
+            comprobadas.append(condicion)
+            return len(comprobadas) > 1
+        return "Window.IsActive(Startup)" in condicion
+
+    kodi.getCondVisibility = cargando_inicio
+    arranque(monitor_prueba, reproductor_prueba)
+    arranque(monitor_prueba, reproductor_prueba)
+    comprobar("arranque: espera al menú de Kodi y abre Palantix una sola vez por sesión",
+              REGISTRO["builtin"] == ["RunAddon(plugin.video.palantix)"] and len(comprobadas) == 2)
+    PROPIEDADES.pop(marca_inicio, None)
+    REGISTRO["builtin"] = []
+    reproductor_prueba.isPlaying = lambda: True
+    arranque(monitor_prueba, reproductor_prueba)
+    comprobar("arranque: respeta una reproducción ya iniciada", not REGISTRO["builtin"])
+    PROPIEDADES.pop(marca_inicio, None)
+    reproductor_prueba.isPlaying = lambda: False
+    kodi.getCondVisibility = lambda condicion: condicion in ("Window.IsActive(Home)", "System.HasActiveModalDialog")
+    arranque(monitor_prueba, reproductor_prueba)
+    comprobar("arranque: respeta un diálogo abierto en Kodi", not REGISTRO["builtin"])
+finally:
+    kodi.getCondVisibility = visibilidad_original
+    AJUSTES.pop("inicio_automatico", None)
+    PROPIEDADES.pop(marca_inicio, None)
 rep = servicio["Reproductor"]()
 rep.onAVStarted()
 comprobar("servicio: recoge los datos y los borra de la ventana", rep.siguiente and "palantix.siguiente" not in PROPIEDADES)

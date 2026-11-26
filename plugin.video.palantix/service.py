@@ -303,10 +303,31 @@ def comprobar_fuentes(revisar_avisos=False):
     disponibilidad.comprobar_lote(cache, (proveedores, pref), consultar)
 
 
+def abrir_al_arrancar(monitor, reproductor):
+    """Abre Palantix una vez por sesión de Kodi, aunque se recargue el servicio."""
+    marca = "palantix.arranque_comprobado"
+    if VENTANA.getProperty(marca):
+        return
+    VENTANA.setProperty(marca, "1")
+
+    if ajuste("inicio_automatico") != "true" or monitor.waitForAbort(1):
+        return
+    inicio_kodi = "Window.IsActive(Startup) | Window.IsActive(Splash) | Window.IsActive(StartWindow)"
+    for _ in range(15):
+        if reproductor.isPlaying() or xbmc.getCondVisibility("System.HasActiveModalDialog"):
+            return
+        if xbmc.getCondVisibility("Window.IsActive(Home)"):
+            xbmc.executebuiltin("RunAddon(plugin.video.palantix)")
+            return
+        if not xbmc.getCondVisibility(inicio_kodi) or monitor.waitForAbort(1):
+            return
+
+
 def main():
     monitor = xbmc.Monitor()
     reproductor = Reproductor()
     log("Arrancado")
+    abrir_al_arrancar(monitor, reproductor)
     if not monitor.waitForAbort(20):  # dejamos que Kodi termine de arrancar
         actualizar_solo()
         avisar_caducidad()
