@@ -20,18 +20,23 @@ def tramos(programas, inicio):
     return visibles
 
 
-def mostrar(addon, canales, programas, hora, ocultar, seleccionar, logos=None):
+def mostrar(addon, canales, programas, hora, ocultar, seleccionar, logos=None, grupos=None):
     import xbmcgui
 
     logos = logos or {}
     textura = str(Path(addon.getAddonInfo("path")) / "resources" / "skins" / "default" / "media" / "blanco.png")
-    canales_visibles = list(canales.items())
+    grupos = grupos or {}
+    categorias = sorted(set(grupos.values()), key=lambda g: (g != "Generalistas", g.casefold()))
+    if categorias and len(grupos) < len(canales) and "Otros canales" not in categorias:
+        categorias.append("Otros canales")
 
     class Guia(xbmcgui.WindowXMLDialog):
         def onInit(self):
             self.inicio = int(hora) - (datetime.fromtimestamp(hora).minute % 30) * 60 - int(hora) % 60
             self.minimo, self.maximo = self.inicio - DURACION, self.inicio + 15 * DURACION
             self.pagina = 0
+            self.categoria = ""
+            self.canales_visibles = list(canales.items())
             self.controles = []
             self.dibujar()
 
@@ -65,10 +70,12 @@ def mostrar(addon, canales, programas, hora, ocultar, seleccionar, logos=None):
                 boton(889, 34, 205, 55, "Canales  ▼", self.mover, (0, 1)),
                 boton(1135, 34, 225, 55, "Opciones de TV", self.abrir_opciones, ()),
             ]
+            if categorias:
+                botones.append(boton(1372, 34, 150, 55, "Grupos", self.elegir_grupo, ()))
             fecha = datetime.fromtimestamp(self.inicio).strftime("%d/%m/%Y")
             texto(1535, 36, 325, 52, fecha, fuente="font27")
             linea(MARGEN, 108, 1816, 2, "FF354258")
-            texto(MARGEN, 120, 340, 48, "Canales", "FFB1C5DC")
+            texto(MARGEN, 120, 340, 48, self.categoria or "Canales", "FFB1C5DC")
             for h in range(6):
                 x = IZQUIERDA + h * ANCHO // 6
                 reloj = datetime.fromtimestamp(self.inicio + h * 1800).strftime("%H:%M")
@@ -76,7 +83,7 @@ def mostrar(addon, canales, programas, hora, ocultar, seleccionar, logos=None):
                 linea(x, 168, 1, 835, "FF27364B")
             filas = [[(b.getX() + b.getWidth() // 2, b) for b in botones]]
             primer_programa = None
-            recorte = canales_visibles[self.pagina:self.pagina + CANALES_POR_PAGINA]
+            recorte = self.canales_visibles[self.pagina:self.pagina + CANALES_POR_PAGINA]
             for indice, (cid, (nombre, enlace)) in enumerate(recorte):
                 y = INICIO_FILAS + indice * ALTO_FILA
                 numero = self.pagina + indice + 1
@@ -107,7 +114,7 @@ def mostrar(addon, canales, programas, hora, ocultar, seleccionar, logos=None):
 
             if recorte:
                 texto(MARGEN, 1013, 900, 44, "%d–%d de %d canales" %
-                      (self.pagina + 1, self.pagina + len(recorte), len(canales_visibles)), "FFB1C5DC")
+                      (self.pagina + 1, self.pagina + len(recorte), len(self.canales_visibles)), "FFB1C5DC")
             for i, fila in enumerate(filas):
                 anterior, siguiente = filas[max(0, i - 1)], filas[min(i + 1, len(filas) - 1)]
                 for j, (x, control) in enumerate(fila):
@@ -127,8 +134,20 @@ def mostrar(addon, canales, programas, hora, ocultar, seleccionar, logos=None):
                 self.inicio = max(self.minimo, min(self.maximo, self.inicio + horas * DURACION))
             if canales_delta:
                 pagina = self.pagina + canales_delta * CANALES_POR_PAGINA
-                if 0 <= pagina < len(canales_visibles):
+                if 0 <= pagina < len(self.canales_visibles):
                     self.pagina = pagina
+            self.dibujar()
+
+        def elegir_grupo(self):
+            opciones = ["Todos los canales"] + categorias
+            seleccion = xbmcgui.Dialog().select("Grupos de TV", opciones,
+                                                  preselect=opciones.index(self.categoria) if self.categoria else 0)
+            if seleccion < 0:
+                return
+            self.categoria = opciones[seleccion] if seleccion else ""
+            self.pagina, self.foco = 0, None
+            self.canales_visibles = [(cid, canal) for cid, canal in canales.items()
+                                    if not self.categoria or grupos.get(cid, "Otros canales") == self.categoria]
             self.dibujar()
 
         def abrir_opciones(self):

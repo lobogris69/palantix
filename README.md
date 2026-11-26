@@ -47,6 +47,10 @@ A partir de ahí las versiones nuevas llegan solas.
   casilla del canal queda en blanco y se puede pulsar para abrir su señal.
 - **TV internacional** presenta los canales de tus listas por grupo. Las listas
   y la agenda se gestionan desde **TV → Opciones de TV**.
+- **TDTChannels** aporta las listas de TV y radio y su guía por identificador. En
+  **TV → Grupos** puedes elegir generalistas, autonómicas y otros grupos. **Radio**
+  reúne emisoras por categorías. Los recursos se consultan desde las listas del
+  [proyecto TDTChannels](https://github.com/LaQuay/TDTChannels) para uso personal y no comercial.
 
 **Inicio, avisos y perfiles**
 - En Ajustes → Catálogo puedes priorizar capítulos nuevos, ocultar las

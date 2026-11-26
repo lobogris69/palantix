@@ -1,4 +1,4 @@
-"""Guía XMLTV dobleM. Las fechas se guardan como segundos UTC."""
+"""Guías XMLTV. Las fechas se guardan como segundos UTC."""
 import gzip
 import json
 import os
@@ -11,7 +11,10 @@ from datetime import datetime
 from pathlib import Path
 from xml.etree import ElementTree
 
-URL = "https://raw.githubusercontent.com/davidmuma/EPG_dobleM/master/guiatv.xml.gz"
+FUENTES = {
+    "doblem": "https://raw.githubusercontent.com/davidmuma/EPG_dobleM/master/guiatv.xml.gz",
+    "tdtchannels": "https://www.tdtchannels.com/epg/TV.xml.gz",
+}
 TTL = 4 * 3600
 HORIZONTE = 48 * 3600
 IDS_PALANTIX = {"Esport3": "Esport3 Catalunya"}
@@ -24,8 +27,8 @@ def _fecha(texto):
 def leer_xml(origen, ahora):
     """Lee en flujo y conserva programación útil para las siguientes 48 horas."""
     eventos = ElementTree.iterparse(origen, events=("start", "end"))
-    _, raiz = next(eventos)
-    if raiz.tag != "tv":
+    _, raiz = next(eventos, (None, None))
+    if raiz is None or raiz.tag != "tv":
         raise ValueError("Se esperaba una guía XMLTV")
     nombres, programas = {}, {}
     for accion, elemento in eventos:
@@ -46,23 +49,24 @@ def leer_xml(origen, ahora):
             continue
         raiz.remove(elemento)
     if not nombres or not programas:
-        raise ValueError("La guía dobleM no trae programación vigente")
+        raise ValueError("La guía no trae programación vigente")
     return {"nombres": nombres, "programas": {k: sorted(v) for k, v in programas.items()}}
 
 
-def leer_cache(cache):
+def leer_cache(cache, fuente="doblem"):
     try:
-        datos = json.loads((Path(cache) / "epg-doblem.json").read_text(encoding="utf-8"))
+        datos = json.loads((Path(cache) / ("epg-%s.json" % fuente)).read_text(encoding="utf-8"))
         if isinstance(datos, dict) and all(isinstance(datos.get(k), dict) for k in ("nombres", "programas")):
             return datos
     except (OSError, ValueError):
         return None
 
 
-def cargar(cache, ahora=None):
+def cargar(cache, ahora=None, fuente="doblem"):
+    url = FUENTES[fuente]
     ahora = time.time() if ahora is None else ahora
-    ruta = Path(cache) / "epg-doblem.json"
-    datos = leer_cache(cache)
+    ruta = Path(cache) / ("epg-%s.json" % fuente)
+    datos = leer_cache(cache, fuente)
     try:
         if datos is not None and ahora - ruta.stat().st_mtime < TTL:
             return datos
@@ -70,7 +74,7 @@ def cargar(cache, ahora=None):
         pass
 
     try:
-        with urllib.request.urlopen(URL, timeout=10) as respuesta:
+        with urllib.request.urlopen(url, timeout=10) as respuesta:
             with gzip.GzipFile(fileobj=respuesta) as xml:
                 nuevos = leer_xml(xml, ahora)
     except (OSError, EOFError, ValueError, ElementTree.ParseError):

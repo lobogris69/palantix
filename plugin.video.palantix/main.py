@@ -610,6 +610,8 @@ def menu():
     carpeta(cine_libre.TITULO, url(accion="cine_libre"), "DefaultMovies.png")
     carpeta("TV", url(accion="tv"), "DefaultTVShows.png")
     carpeta("TV internacional", url(accion="tv_internacional"), "DefaultTVShows.png")
+    if tdtchannels_activo():
+        carpeta("Radio", url(accion="radio_tdt"), "DefaultMusicSongs.png")
     carpeta("Mis listas", url(accion="listas"), "DefaultPlaylist.png")
     carpeta("Ajustes", url(accion="ajustes"), "DefaultAddonService.png")
     carpeta("Actualizar Palantix  " + color("(versión %s)" % ADDON.getAddonInfo("version"), GRIS),
@@ -1494,23 +1496,47 @@ def listas_canales_tv(avisar_exportacion=False):
     return [item for item in items if not item.get("inicio")]
 
 
+def tdtchannels_activo():
+    return ADDON.getSetting("tdtchannels_activo") != "false"
+
+
+def cargar_canales_tdt():
+    try:
+        return tv.canales_tdt(CACHE)
+    except (OSError, ValueError, TypeError, AttributeError):
+        log("La lista de TDTChannels no está disponible")
+        return []
+
+
+def cargar_guia_tv(hora, fuente):
+    try:
+        return epg.cargar(CACHE, hora, fuente)
+    except (OSError, EOFError, ValueError, epg.ElementTree.ParseError):
+        return {"nombres": {}, "programas": {}}
+
+
 def datos_guia_deportes(hora):
     from concurrent.futures import ThreadPoolExecutor
 
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        guia = pool.submit(epg.cargar, CACHE, hora)
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        guia = pool.submit(cargar_guia_tv, hora, "doblem")
+        if tdtchannels_activo():
+            guia_tdt = pool.submit(cargar_guia_tv, hora, "tdtchannels")
+            lista_tdt = pool.submit(cargar_canales_tdt)
+        else:
+            guia_tdt = lista_tdt = None
         canales_tv = listas_canales_tv(avisar_exportacion=True)
-        try:
-            datos = guia.result()
-        except (OSError, EOFError, ValueError, epg.ElementTree.ParseError):
-            datos = {"nombres": {}, "programas": {}}
-    canales, _, logos = tv.preparar(canales_tv, datos)
-    return canales, datos["programas"], logos
+        if lista_tdt is not None:
+            canales_tv.extend(lista_tdt.result())
+        return tv.preparar(canales_tv, guia.result(), guia_tdt.result() if guia_tdt else None)
 
 
 def tv_internacional():
     datos = epg.leer_cache(CACHE) or {"nombres": {}}
-    _, grupos, _ = tv.preparar(listas_canales_tv(), datos)
+    canales = listas_canales_tv()
+    if tdtchannels_activo():
+        canales.extend(cargar_canales_tdt())
+    grupos = tv.preparar(canales, datos).internacionales
     grupo = PARAMS.get("grupo")
     if grupo is None:
         for nombre in sorted(grupos, key=str.casefold):
@@ -1525,11 +1551,33 @@ def tv_internacional():
     return fin_listado()
 
 
+def radio_tdt():
+    if not tdtchannels_activo():
+        return fin_listado()
+    try:
+        grupos = tv.radios_tdt(CACHE)
+    except (OSError, ValueError, TypeError, AttributeError):
+        aviso("No se pudo cargar la radio de TDTChannels")
+        return fin_listado(ok=False)
+    grupo = PARAMS.get("grupo")
+    if grupo is None:
+        for nombre, emisoras in sorted(grupos.items(), key=lambda par: (par[0] != "Populares", par[0].casefold())):
+            carpeta("%s (%d)" % (nombre, len(emisoras)), url(accion="radio_tdt", grupo=nombre), "DefaultMusicSongs.png")
+    else:
+        xbmcplugin.setContent(HANDLE, "songs")
+        for emisora in sorted(grupos.get(grupo, []), key=lambda item: item["titulo"].casefold()):
+            li = xbmcgui.ListItem(emisora["titulo"])
+            li.setArt({"thumb": emisora["poster"] or LOGO})
+            li.setProperty("IsPlayable", "true")
+            xbmcplugin.addDirectoryItem(HANDLE, destino_canal(emisora["url"]), li)
+    return fin_listado()
+
+
 def guia_deportes():
     hora = time.time()
-    canales, programas, _ = datos_guia_deportes(hora)
-    for cid, (nombre, enlace) in canales.items():
-        actual, siguiente = epg.ahora_y_despues(programas.get(cid, []), hora)
+    parrilla = datos_guia_deportes(hora)
+    for cid, (nombre, enlace) in parrilla.canales.items():
+        actual, siguiente = epg.ahora_y_despues(parrilla.programas.get(cid, []), hora)
         partes = [nombre]
         for etiqueta, programa in (("Ahora", actual), ("Después", siguiente)):
             if programa:
@@ -1547,11 +1595,12 @@ def guia_deportes():
 
 def guia_cuadricula_palantix():
     hora = time.time()
-    canales, programas, logos = datos_guia_deportes(hora)
+    parrilla = datos_guia_deportes(hora)
     if HANDLE >= 0:
         fin_listado(ok=False)
-    opciones = cuadricula_tv.mostrar(ADDON, canales, programas, hora,
-                                    ADDON.getSetting("deportes_sin_resultados") != "false", seleccionar_programa, logos=logos)
+    opciones = cuadricula_tv.mostrar(ADDON, parrilla.canales, parrilla.programas, hora,
+                                    ADDON.getSetting("deportes_sin_resultados") != "false", seleccionar_programa,
+                                    logos=parrilla.logos, grupos=parrilla.grupos)
     if opciones:
         xbmc.executebuiltin("ActivateWindow(Videos,%s,return)" % url(accion="deportes"))
 
@@ -2342,6 +2391,7 @@ SIN_TMDB = {
     "cine_libre": catalogo_cine_libre,
     "tv": guia_cuadricula_palantix,
     "tv_internacional": tv_internacional,
+    "radio_tdt": radio_tdt,
     "tv_importar_ekhorus": importar_canales_ekhorus,
     "deportes": menu_deportes,
     "deportes_canales": canales_deportes,

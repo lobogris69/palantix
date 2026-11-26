@@ -41,7 +41,7 @@ json.dump([
 
 # ---------------------------------------------------------------- Kodi simulado
 AJUSTES = {"tmdb_key": "clave-prueba", "lista_1": LISTA_JSON, "lista_2": LISTA_M3U, "lista_3": LISTA_SERIES,
-           "cache_min": "60", "prov_archive_org": "false", "prov_listas": "true",
+           "cache_min": "60", "prov_archive_org": "false", "prov_listas": "true", "tdtchannels_activo": "false",
            "idioma_pref": "0", "calidad_max": "0", "solo_idioma": "false", "autoplay": "false", "inicio_plataforma": "false", "preguntado_idioma": "true"}
 TMDB_FALSO = {
     "/movie/653": {"poster_path": "/nosferatu.jpg", "backdrop_path": "/nosferatu-fondo.jpg"},
@@ -294,7 +294,7 @@ try:
         comprobar("TV internacional deja elegir el canal del grupo",
                   len(r["items"]) == 1 and "chile.m3u8" in r["items"][0][1])
 
-        def mostrar_guia(addon, canales, programas, hora, ocultar, seleccionar, logos=None):
+        def mostrar_guia(addon, canales, programas, hora, ocultar, seleccionar, logos=None, grupos=None):
             comprobar("TV entra directamente a la guía española y normaliza el nombre de La 1",
                       canales.get("La 1 HD", (None, None))[1] == "https://ejemplo.invalid/tve.m3u8"
                       and all("chile.m3u8" not in u for _, u in canales.values()))
@@ -348,11 +348,75 @@ class VentanaGuia:
                   "Canal 12" in [c.etiqueta for c in self.renderizados]
                   and "Canal 1" not in [c.etiqueta for c in self.renderizados])
 
+        opcion = next(c for c in self.renderizados if c.etiqueta == "Grupos")
+        REGISTRO["select"] = 1
+        try:
+            self.onClick(opcion.getId())
+        finally:
+            REGISTRO["select"] = 0
+        etiquetas = [c.etiqueta for c in self.renderizados]
+        comprobar("guía: el selector de grupos filtra la cuadrícula y vuelve a la primera página",
+                  "Canal 12" in etiquetas and "Canal 1" not in etiquetas and self.pagina == 0)
+
 
 with patch.multiple(sys.modules["xbmcgui"], create=True, WindowXMLDialog=VentanaGuia,
                     ControlButton=ControlGuia, ControlLabel=ControlGuia, ControlImage=ControlGuia):
     cuadricula_real.mostrar(addon_original(), {str(n): ("Canal %d" % n, "https://ejemplo.invalid/tv") for n in range(1, 13)},
-                            {}, time(), False, lambda *args: True, logos={"1": "https://ejemplo.invalid/logo.png"})
+                            {}, time(), False, lambda *args: True, logos={"1": "https://ejemplo.invalid/logo.png"},
+                            grupos={"1": "Regional", "12": "Generalistas"})
+
+# Los tres recursos de TDTChannels se prueban por las rutas públicas del complemento.
+from datetime import datetime, timezone  # noqa: E402
+from gzip import compress  # noqa: E402
+from io import BytesIO  # noqa: E402
+
+tdt_lista = (
+    '#EXTM3U\n#EXTINF:-1 tvg-id="La1.TV" group-title="Generalistas",La 1\nhttps://ejemplo.invalid/la1.m3u8\n'
+    '#EXTINF:-1 group-title="Regional",Canal comarcal\nhttps://ejemplo.invalid/comarca.m3u8\n'
+    '#EXTINF:-1 tvg-id="Mundo.TV" group-title="Int. Europa",Canal europeo\nhttps://ejemplo.invalid/europa.m3u8\n'
+).encode()
+tdt_radio_lista = (
+    '#EXTM3U\n#EXTINF:-1 tvg-id="A.Radio" group-title="Radio_Populares",Emisora A\nhttps://ejemplo.invalid/a.aac\n'
+    '#EXTINF:-1 tvg-id="A.Radio" group-title="Radio_Populares",Emisora A\nhttps://ejemplo.invalid/a.mp3\n'
+).encode()
+hora_programa = lambda instante: datetime.fromtimestamp(instante, timezone.utc).strftime("%Y%m%d%H%M%S +0000")
+tdt_xml = compress(('<tv><channel id="La1.TV"><display-name>La1.TV</display-name></channel>'
+                    '<programme channel="La1.TV" start="%s" stop="%s"><title>Programa de TDT</title></programme></tv>'
+                    % (hora_programa(time() - 60), hora_programa(time() + 3600))).encode())
+tdt_peticiones = []
+
+
+def abrir_tdt(origen, timeout):
+    ruta = getattr(origen, "full_url", origen)
+    tdt_peticiones.append(ruta)
+    recursos = {"https://www.tdtchannels.com/lists/tv.m3u8": tdt_lista,
+                "https://www.tdtchannels.com/lists/radio.m3u8": tdt_radio_lista,
+                "https://www.tdtchannels.com/epg/TV.xml.gz": tdt_xml}
+    return BytesIO(recursos[ruta])
+
+
+try:
+    AJUSTES["tdtchannels_activo"] = "true"
+    with patch("urllib.request.urlopen", side_effect=abrir_tdt):
+        r = abrir("?accion=deportes_epg")
+        comprobar("TDTChannels: la guía enlaza por tvg-id y combina programación dobleM",
+                  any(t.startswith("La 1") and "Programa de TDT" in t and "la1.m3u8" in u for t, u in r["items"])
+                  and any(t.startswith("Teledeporte") and "Partido" in t for t, _ in r["items"]))
+        comprobar("TDTChannels: conserva los canales nacionales sin ficha de programación",
+                  any("Canal comarcal" in t and "Sin programación" in t and "comarca.m3u8" in u for t, u in r["items"]))
+        r = abrir("?accion=tv_internacional")
+        comprobar("TDTChannels: los canales internacionales quedan en su grupo",
+                  any(t == "Int. Europa (1)" for t, _ in r["items"]))
+        r = abrir("?accion=radio_tdt")
+        comprobar("Radio: muestra los grupos y agrupa señales duplicadas de la misma emisora",
+                  [t for t, _ in r["items"]] == ["Populares (1)"])
+        r = abrir("?accion=radio_tdt&grupo=Populares")
+        comprobar("Radio: se puede seleccionar una señal directa de la emisora",
+                  len(r["items"]) == 1 and "a.aac" in r["items"][0][1] and LIS[0].props["IsPlayable"] == "true")
+        comprobar("TDTChannels: sólo descarga una vez cada recurso durante la sesión de prueba",
+                  len(tdt_peticiones) == len(set(tdt_peticiones)) == 3)
+finally:
+    AJUSTES["tdtchannels_activo"] = "false"
 
 r = abrir("?accion=cine_libre")
 comprobar("cine libre: muestra categorías", any(i[0] == "Documentales" for i in r["items"]))

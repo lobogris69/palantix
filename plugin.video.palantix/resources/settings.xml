@@ -27,7 +27,8 @@
         <setting id="mostrar_etiquetas" type="bool" label="Mostrar idioma y calidad en los títulos" default="true"/>
         <setting id="color_etiquetas" type="enum" label="Color de las etiquetas" values="Sin color|Dorado|Azul|Verde|Naranja|Violeta|Blanco" default="1"/>
     </category>
-    <category label="Deportes">
+    <category label="TV y radio">
+        <setting id="tdtchannels_activo" type="bool" label="Incluir canales, guía y radio de TDTChannels" default="true"/>
         <setting id="deportes_sin_resultados" type="bool" label="Ocultar títulos marcados con resultado" default="true"/>
     </category>
     <category label="Reproducción">
