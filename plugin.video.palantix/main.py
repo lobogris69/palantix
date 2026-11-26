@@ -1429,6 +1429,7 @@ def menu_deportes():
     reproductor = complemento_ace_stream()
     if reproductor and reproductor.getAddonInfo("name").casefold() == "ekhorus":
         carpeta("Canales de EKHorus", deportes.ruta_catalogo_ekhorus(), "DefaultTVShows.png")
+        carpeta("Importar canales de EKHorus", url(accion="tv_importar_ekhorus"), "DefaultAddSource.png")
     carpeta("Mis fuentes", url(accion="deportes_fuentes"), "DefaultPlaylist.png")
     return fin_listado()
 
@@ -1451,15 +1452,35 @@ def canales_deportes():
     return fin_listado()
 
 
-def listas_canales_tv():
+def importar_canales_ekhorus():
+    fin_listado(ok=False)
+    reproductor = complemento_ace_stream()
+    if reproductor and reproductor.getAddonInfo("name").casefold() == "ekhorus":
+        xbmc.executebuiltin("RunPlugin(%s)" % deportes.ruta_exportar_ekhorus())
+    else:
+        aviso("Activa EKHorus para importar sus canales")
+
+
+def listas_canales_tv(avisar_exportacion=False):
     items = []
     reproductor = complemento_ace_stream()
     if reproductor and reproductor.getAddonInfo("name").casefold() == "ekhorus":
-        ruta = xbmcvfs.translatePath("special://profile/addon_data/script.module.horus/tv/ekhorus.m3u")
+        datos_ekhorus = "special://profile/addon_data/script.module.horus/"
         try:
-            items.extend(listas.parsear(listas.descargar(ruta), canales=True))
+            ruta = xbmcvfs.translatePath(datos_ekhorus + "tv/ekhorus.m3u")
+            exportados = listas.parsear(listas.descargar(ruta), canales=True)
         except (OSError, ValueError, TypeError, AttributeError):
-            log("La lista exportada de EKHorus no está disponible")
+            exportados = []
+        if exportados:
+            paises = deportes.paises_canal_ekhorus(xbmcvfs.translatePath(datos_ekhorus + "catalogo.json"))
+            for item in exportados:
+                canal = deportes.datos_canal_ekhorus(item["url"]) or {}
+                cid = canal.get("infohash") or canal.get("id")
+                if not item["pais"] and cid in paises:
+                    item["pais"] = paises[cid]
+            items.extend(exportados)
+        elif avisar_exportacion:
+            aviso("EKHorus aún no ha exportado canales. Ve a Opciones de TV → Importar canales de EKHorus.")
     for fuente in mislistas.leer(perfil_deportes()):
         if deportes.ace_id(fuente["origen"]):
             items.append({"titulo": fuente["nombre"], "url": fuente["origen"], "grupo": "Mis canales", "poster": ""})
@@ -1478,7 +1499,7 @@ def datos_guia_deportes(hora):
 
     with ThreadPoolExecutor(max_workers=1) as pool:
         guia = pool.submit(epg.cargar, CACHE, hora)
-        canales_tv = listas_canales_tv()
+        canales_tv = listas_canales_tv(avisar_exportacion=True)
         try:
             datos = guia.result()
         except (OSError, EOFError, ValueError, epg.ElementTree.ParseError):
@@ -2321,6 +2342,7 @@ SIN_TMDB = {
     "cine_libre": catalogo_cine_libre,
     "tv": guia_cuadricula_palantix,
     "tv_internacional": tv_internacional,
+    "tv_importar_ekhorus": importar_canales_ekhorus,
     "deportes": menu_deportes,
     "deportes_canales": canales_deportes,
     "deportes_epg": guia_deportes,

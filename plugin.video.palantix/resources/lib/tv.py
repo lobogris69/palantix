@@ -29,11 +29,10 @@ def es_espanol(item, cid):
     pais = epg.normalizar(item.get("pais", ""))
     if pais:
         return bool(ESPANA.intersection(pais.split()))
-    grupo = epg.normalizar(item["grupo"])
-    if any(grupo == p or grupo.startswith(p + " ") for p in ESPANA):
-        return True
-    if any(grupo == p or grupo.startswith(p + " ") for p in PAISES - ESPANA):
-        return False
+    grupos = [epg.normalizar(g) for g in re.split(r"[;|,]", item["grupo"])]
+    regiones = {p for p in PAISES if any(g == p or g.startswith(p + " ") for g in grupos)}
+    if regiones:
+        return bool(regiones & ESPANA)
     identificador = item.get("tvg_id", "").casefold()
     if identificador.endswith(".es"):
         return True

@@ -233,6 +233,12 @@ try:
     partes = urlsplit(ruta)
     comprobar("EKHorus abre su catálogo clásico", partes.netloc == "script.module.horus" and
               literal_eval(b64decode(unquote(partes.query)).decode()) == {"action": "catalogo", "clasico": 1})
+    importar = next((u for titulo, u in r["items"] if titulo == "Importar canales de EKHorus"), "")
+    comprobar("TV permite abrir el exportador oficial de EKHorus", "accion=tv_importar_ekhorus" in importar)
+    r = abrir("?accion=tv_importar_ekhorus")
+    destino = r["builtin"][-1][len("RunPlugin("):-1]
+    comprobar("Importar canales de EKHorus delega en su diálogo de exportación",
+              literal_eval(b64decode(unquote(urlsplit(destino).query)).decode()) == {"action": "tv_exportar"})
     r = abrir("?accion=deportes_fuentes")
     comprobar("Mis fuentes identifica la variante instalada", any(i[0] == "Configurar EKHorus" for i in r["items"]))
     abrir("?accion=deportes_horus")
@@ -252,16 +258,24 @@ try:
     exportacion = Path(TMP, "ekhorus.m3u")
     enlace = "plugin://script.module.horus/?" + quote(b64encode(
         repr({"action": "play", "infohash": cid, "motor": 1}).encode()))
+    hash_local = "b" * 40
+    ruta_local = "plugin://script.module.horus/?" + quote(b64encode(
+        repr({"action": "play", "infohash": hash_local, "label": "Canal Costa 1080p **", "motor": 1}).encode()))
+    catalogo_ekhorus = Path(TMP, "catalogo.json")
+    catalogo_ekhorus.write_text(json.dumps({"canales": [{"infohash": hash_local, "paises": ["es"]}]}),
+                                encoding="utf-8")
     exportacion.write_text("#EXTM3U\n#EXTINF:-1,Teledeporte HD\n" + enlace +
                            '\n#EXTINF:-1 group-title="España",Canal local\nhttps://ejemplo.invalid/local.m3u8\n'
                            '#EXTINF:-1 group-title="Chile, Noticias" tvg-country="CL",La 1 HD\n'
                            "https://ejemplo.invalid/chile.m3u8\n"
-                           '#EXTINF:-1 group-title="España",ES | TVE 1 UHD\nhttps://ejemplo.invalid/tve.m3u8\n',
+                           '#EXTINF:-1 group-title="España",ES | TVE 1 UHD\nhttps://ejemplo.invalid/tve.m3u8\n'
+                           '#EXTINF:-1 group-title="Favoritos;Deportes",Canal Costa 1080p **\n' + ruta_local + "\n",
                            encoding="utf-8")
     vfs = sys.modules["xbmcvfs"]
     traducir = vfs.translatePath
     try:
-        vfs.translatePath = lambda ruta: str(exportacion) if ruta.endswith("/ekhorus.m3u") else TMP
+        archivos_ekhorus = {"ekhorus.m3u": exportacion, "catalogo.json": catalogo_ekhorus}
+        vfs.translatePath = lambda ruta: str(archivos_ekhorus.get(ruta.rsplit("/", 1)[-1], TMP))
         r = abrir("?accion=deportes_epg")
         teledeporte = [(titulo, u) for titulo, u in r["items"] if titulo.startswith("Teledeporte")]
         comprobar("Guía: EKHorus tiene prioridad para Teledeporte", len(teledeporte) == 1 and
@@ -283,6 +297,9 @@ try:
             comprobar("TV entra directamente a la guía española y normaliza el nombre de La 1",
                       canales.get("La 1 HD", (None, None))[1] == "https://ejemplo.invalid/tve.m3u8"
                       and all("chile.m3u8" not in u for _, u in canales.values()))
+            comprobar("TV conserva un canal español sin EPG ni país en el M3U usando el catálogo de EKHorus",
+                      any(nombre == "Canal Costa 1080p **" and enlace == ruta_local
+                          for nombre, enlace in canales.values()))
             canal, directo = next(v for v in canales.values() if v[0] == "Canal local")
             return not seleccionar(canal, directo, hora, hora + 100, "")
 
