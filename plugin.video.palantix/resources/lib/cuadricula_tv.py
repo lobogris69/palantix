@@ -1,9 +1,11 @@
 """Guía dobleM por canal con ventanas de tres horas."""
 from datetime import datetime
+from pathlib import Path
 
 DURACION = 3 * 3600
-CANALES_POR_PAGINA = 5
-IZQUIERDA, ANCHO = 365, 1480
+CANALES_POR_PAGINA = 11
+MARGEN, IZQUIERDA, ANCHO = 52, 412, 1456
+INICIO_FILAS, ALTO_FILA = 178, 75
 
 
 def tramos(programas, inicio):
@@ -18,8 +20,12 @@ def tramos(programas, inicio):
     return visibles
 
 
-def mostrar(addon, canales, programas, hora, ocultar, seleccionar):
+def mostrar(addon, canales, programas, hora, ocultar, seleccionar, logos=None):
     import xbmcgui
+
+    logos = logos or {}
+    textura = str(Path(addon.getAddonInfo("path")) / "resources" / "skins" / "default" / "media" / "blanco.png")
+    canales_visibles = list(canales.items())
 
     class Guia(xbmcgui.WindowXMLDialog):
         def onInit(self):
@@ -39,49 +45,69 @@ def mostrar(addon, canales, programas, hora, ocultar, seleccionar):
                 self.controles.append(control)
                 return control
 
-            def boton(x, y, ancho, alto, titulo, accion, argumentos):
-                control = agregar(xbmcgui.ControlButton(x, y, ancho, alto, titulo, font="font13"))
+            def boton(x, y, ancho, alto, titulo, accion, argumentos, margen=12):
+                control = agregar(xbmcgui.ControlButton(x, y, ancho, alto, titulo, font="font13",
+                                                       textOffsetX=margen, alignment=4))
                 self.acciones[control.getId()] = (accion, argumentos)
                 return control
 
+            def texto(x, y, ancho, alto, valor, color="FFF2F5FA", fuente="font13"):
+                return agregar(xbmcgui.ControlLabel(x, y, ancho, alto, valor, font=fuente,
+                                                   textColor=color, alignment=4))
+
+            def linea(x, y, ancho, alto, color):
+                agregar(xbmcgui.ControlImage(x, y, ancho, alto, textura, colorDiffuse=color))
+
             botones = [
-                boton(55, 130, 235, 60, "◀  Horas", self.mover, (-1, 0)),
-                boton(300, 130, 235, 60, "Horas  ▶", self.mover, (1, 0)),
-                boton(560, 130, 235, 60, "▲  Canales", self.mover, (0, -1)),
-                boton(805, 130, 235, 60, "Canales  ▼", self.mover, (0, 1)),
-                boton(1050, 130, 235, 60, "Opciones de TV", self.abrir_opciones, ()),
+                boton(255, 34, 185, 55, "◀  Horas", self.mover, (-1, 0)),
+                boton(449, 34, 185, 55, "Horas  ▶", self.mover, (1, 0)),
+                boton(675, 34, 205, 55, "▲  Canales", self.mover, (0, -1)),
+                boton(889, 34, 205, 55, "Canales  ▼", self.mover, (0, 1)),
+                boton(1135, 34, 225, 55, "Opciones de TV", self.abrir_opciones, ()),
             ]
             fecha = datetime.fromtimestamp(self.inicio).strftime("%d/%m/%Y")
-            agregar(xbmcgui.ControlLabel(1450, 135, 390, 50, fecha, font="font27"))
+            texto(1535, 36, 325, 52, fecha, fuente="font27")
+            linea(MARGEN, 108, 1816, 2, "FF354258")
+            texto(MARGEN, 120, 340, 48, "Canales", "FFB1C5DC")
             for h in range(6):
+                x = IZQUIERDA + h * ANCHO // 6
                 reloj = datetime.fromtimestamp(self.inicio + h * 1800).strftime("%H:%M")
-                agregar(xbmcgui.ControlLabel(IZQUIERDA + h * ANCHO // 6, 220, 225, 50, reloj, font="font13"))
-            filas = [[(55 + i * 250, b) for i, b in enumerate(botones)]]
-            primer_canal = None
-            recorte = list(canales.items())[self.pagina:self.pagina + CANALES_POR_PAGINA]
+                texto(x + 6, 120, 225, 48, reloj, "FFB1C5DC")
+                linea(x, 168, 1, 835, "FF27364B")
+            filas = [[(b.getX() + b.getWidth() // 2, b) for b in botones]]
+            primer_programa = None
+            recorte = canales_visibles[self.pagina:self.pagina + CANALES_POR_PAGINA]
             for indice, (cid, (nombre, enlace)) in enumerate(recorte):
-                y = 290 + indice * 125
-                agregar(xbmcgui.ControlLabel(65, y + 20, 285, 65, nombre, font="font13"))
+                y = INICIO_FILAS + indice * ALTO_FILA
+                numero = self.pagina + indice + 1
+                margen = 122 if logos.get(cid) else 62
+                max_nombre = 22 if logos.get(cid) else 27
+                etiqueta = nombre if len(nombre) <= max_nombre else nombre[:max_nombre - 1] + "…"
+                directo = boton(MARGEN, y, IZQUIERDA - MARGEN - 8, ALTO_FILA - 5, etiqueta,
+                                self.programa, (nombre, enlace, self.inicio, self.inicio + DURACION, ""), margen)
+                texto(MARGEN + 13, y, 42, ALTO_FILA - 5, str(numero), "FFD2E7FF")
+                if logos.get(cid):
+                    agregar(xbmcgui.ControlImage(MARGEN + 56, y + 12, 54, 46, logos[cid], aspectRatio=2))
                 bloques = tramos(programas.get(cid, []), self.inicio) or [
                     (IZQUIERDA, ANCHO, self.inicio, self.inicio + DURACION, "")]
-                controles = []
+                controles = [(MARGEN + (IZQUIERDA - MARGEN) // 2, directo)]
                 for x, ancho, inicio, fin, titulo in bloques:
-                    if ancho < 7:
+                    if ancho < 11:
                         continue
                     if titulo and ocultar and fin <= hora:
                         titulo = "Programa anterior"
-                    argumentos = (nombre, enlace, inicio, fin, titulo)
-                    reloj = datetime.fromtimestamp(inicio).strftime("%H:%M")
-                    n = max(2, (ancho - 12) // 13)
-                    corta = titulo[:n - 1] + "…" if len(titulo) > n else titulo
-                    etiqueta = ((reloj + "  " + corta) if ancho >= 140 else corta) if titulo else ""
-                    control = boton(x, y, ancho - 3, 88, etiqueta, self.programa, argumentos)
-                    if primer_canal is None and (not titulo or inicio <= hora < fin):
-                        primer_canal = control
+                    n = max(1, (ancho - 22) // 14)
+                    visible = titulo if len(titulo) <= n else titulo[:n - 1] + "…"
+                    control = boton(x + 2, y, ancho - 5, ALTO_FILA - 5, visible,
+                                    self.programa, (nombre, enlace, inicio, fin, titulo))
+                    if primer_programa is None and (not titulo or inicio <= hora < fin):
+                        primer_programa = control
                     controles.append((x + ancho // 2, control))
-                if controles:
-                    filas.append(controles)
+                filas.append(controles)
 
+            if recorte:
+                texto(MARGEN, 1013, 900, 44, "%d–%d de %d canales" %
+                      (self.pagina + 1, self.pagina + len(recorte), len(canales_visibles)), "FFB1C5DC")
             for i, fila in enumerate(filas):
                 anterior, siguiente = filas[max(0, i - 1)], filas[min(i + 1, len(filas) - 1)]
                 for j, (x, control) in enumerate(fila):
@@ -91,8 +117,9 @@ def mostrar(addon, canales, programas, hora, ocultar, seleccionar):
                                           fila[min(j + 1, len(fila) - 1)][1])
             if self.inicio <= hora < self.inicio + DURACION:
                 x = IZQUIERDA + int((hora - self.inicio) * ANCHO / DURACION)
-                agregar(xbmcgui.ControlLabel(x, 268, 120, 35, "▾ AHORA", font="font13", textColor="FF76D6FF"))
-            self.setFocus((primer_canal or botones[0]) if self.foco is None else botones[self.foco])
+                linea(x, 163, 3, 15 + ALTO_FILA * len(recorte), "B078C9FF")
+            inicial = primer_programa or (filas[1][0][1] if recorte else botones[0])
+            self.setFocus(inicial if self.foco is None else botones[self.foco])
 
         def mover(self, horas, canales_delta):
             self.foco = (1 if horas > 0 else 0) if horas else (3 if canales_delta > 0 else 2)
@@ -100,7 +127,7 @@ def mostrar(addon, canales, programas, hora, ocultar, seleccionar):
                 self.inicio = max(self.minimo, min(self.maximo, self.inicio + horas * DURACION))
             if canales_delta:
                 pagina = self.pagina + canales_delta * CANALES_POR_PAGINA
-                if 0 <= pagina < len(canales):
+                if 0 <= pagina < len(canales_visibles):
                     self.pagina = pagina
             self.dibujar()
 
@@ -113,8 +140,11 @@ def mostrar(addon, canales, programas, hora, ocultar, seleccionar):
                 self.close()
 
         def onAction(self, accion):
-            if accion.getId() in (9, 10, 92):
+            codigo = accion.getId()
+            if codigo in (9, 10, 92):
                 self.close()
+            elif codigo in (5, 6):
+                self.mover(0, 1 if codigo == 6 else -1)
 
         def onClick(self, control_id):
             if control_id in self.acciones:

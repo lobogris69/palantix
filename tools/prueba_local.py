@@ -2,6 +2,7 @@
 
 Uso: python tools/prueba_local.py
 """
+import importlib
 import json
 import os
 import runpy
@@ -293,7 +294,7 @@ try:
         comprobar("TV internacional deja elegir el canal del grupo",
                   len(r["items"]) == 1 and "chile.m3u8" in r["items"][0][1])
 
-        def mostrar_guia(addon, canales, programas, hora, ocultar, seleccionar):
+        def mostrar_guia(addon, canales, programas, hora, ocultar, seleccionar, logos=None):
             comprobar("TV entra directamente a la guía española y normaliza el nombre de La 1",
                       canales.get("La 1 HD", (None, None))[1] == "https://ejemplo.invalid/tve.m3u8"
                       and all("chile.m3u8" not in u for _, u in canales.values()))
@@ -312,6 +313,47 @@ try:
 finally:
     sys.modules["xbmcaddon"].Addon = addon_original
     sys.modules["xbmc"].getCondVisibility = visibilidad_original
+# Comprueba el diseño y la navegación con los controles de Kodi simulados.
+from resources.lib import cuadricula_tv as cuadricula_real  # noqa: E402
+importlib.reload(cuadricula_real)
+
+
+class ControlGuia:
+    def __init__(self, x, y, ancho, alto, etiqueta, **kwargs):
+        self.x, self.y, self.ancho, self.etiqueta = x, y, ancho, etiqueta
+
+    def getId(self): return id(self)
+    def getX(self): return self.x
+    def getWidth(self): return self.ancho
+    def setNavigation(self, *vecinos): self.vecinos = vecinos
+
+
+class VentanaGuia:
+    def __init__(self, *args): self.renderizados = []
+    def addControl(self, control): self.renderizados.append(control)
+    def removeControls(self, controles): self.renderizados = []
+    def setFocus(self, control): self.foco_actual = control
+    def close(self): pass
+
+    def doModal(self):
+        self.onInit()
+        etiquetas = [c.etiqueta for c in self.renderizados]
+        comprobar("guía compacta: muestra once canales y un logotipo en la primera página",
+                  "Canal 11" in etiquetas and "Canal 12" not in etiquetas
+                  and "https://ejemplo.invalid/logo.png" in etiquetas)
+        comprobar("guía compacta: abre con el foco en la primera fila, tras una cabecera corta",
+                  self.foco_actual.y == cuadricula_real.INICIO_FILAS and self.foco_actual.vecinos)
+        self.onAction(types.SimpleNamespace(getId=lambda: 6))
+        comprobar("guía compacta: el avance de página lleva a los canales restantes",
+                  "Canal 12" in [c.etiqueta for c in self.renderizados]
+                  and "Canal 1" not in [c.etiqueta for c in self.renderizados])
+
+
+with patch.multiple(sys.modules["xbmcgui"], create=True, WindowXMLDialog=VentanaGuia,
+                    ControlButton=ControlGuia, ControlLabel=ControlGuia, ControlImage=ControlGuia):
+    cuadricula_real.mostrar(addon_original(), {str(n): ("Canal %d" % n, "https://ejemplo.invalid/tv") for n in range(1, 13)},
+                            {}, time(), False, lambda *args: True, logos={"1": "https://ejemplo.invalid/logo.png"})
+
 r = abrir("?accion=cine_libre")
 comprobar("cine libre: muestra categorías", any(i[0] == "Documentales" for i in r["items"]))
 r = abrir("?accion=cine_libre&g=Documentales")

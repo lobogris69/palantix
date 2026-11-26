@@ -1504,13 +1504,13 @@ def datos_guia_deportes(hora):
             datos = guia.result()
         except (OSError, EOFError, ValueError, epg.ElementTree.ParseError):
             datos = {"nombres": {}, "programas": {}}
-    canales, _ = tv.preparar(canales_tv, datos)
-    return canales, datos["programas"]
+    canales, _, logos = tv.preparar(canales_tv, datos)
+    return canales, datos["programas"], logos
 
 
 def tv_internacional():
     datos = epg.leer_cache(CACHE) or {"nombres": {}}
-    _, grupos = tv.preparar(listas_canales_tv(), datos)
+    _, grupos, _ = tv.preparar(listas_canales_tv(), datos)
     grupo = PARAMS.get("grupo")
     if grupo is None:
         for nombre in sorted(grupos, key=str.casefold):
@@ -1527,7 +1527,7 @@ def tv_internacional():
 
 def guia_deportes():
     hora = time.time()
-    canales, programas = datos_guia_deportes(hora)
+    canales, programas, _ = datos_guia_deportes(hora)
     for cid, (nombre, enlace) in canales.items():
         actual, siguiente = epg.ahora_y_despues(programas.get(cid, []), hora)
         partes = [nombre]
@@ -1547,11 +1547,11 @@ def guia_deportes():
 
 def guia_cuadricula_palantix():
     hora = time.time()
-    canales, programas = datos_guia_deportes(hora)
+    canales, programas, logos = datos_guia_deportes(hora)
     if HANDLE >= 0:
         fin_listado(ok=False)
     opciones = cuadricula_tv.mostrar(ADDON, canales, programas, hora,
-                                    ADDON.getSetting("deportes_sin_resultados") != "false", seleccionar_programa)
+                                    ADDON.getSetting("deportes_sin_resultados") != "false", seleccionar_programa, logos=logos)
     if opciones:
         xbmc.executebuiltin("ActivateWindow(Videos,%s,return)" % url(accion="deportes"))
 
