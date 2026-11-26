@@ -343,6 +343,24 @@ class VentanaGuia:
                   and "https://ejemplo.invalid/logo.png" in etiquetas)
         comprobar("guía compacta: abre con el foco en la primera fila, tras una cabecera corta",
                   self.foco_actual.y == cuadricula_real.INICIO_FILAS and self.foco_actual.vecinos)
+        ultimo = next(c for c in self.renderizados if c.etiqueta == "Canal 11")
+        self.onFocus(ultimo.getId())
+        self.onFocus(ultimo.vecinos[1].getId())
+        comprobar("guía: la flecha abajo al final desplaza una fila y mantiene el foco en los canales",
+                  self.pagina == 1 and self.foco_actual.etiqueta == "Canal 12")
+        ultimo = self.foco_actual
+        self.onFocus(ultimo.vecinos[1].getId())
+        comprobar("guía: el límite inferior mantiene visible y seleccionado el último canal",
+                  self.pagina == 1 and self.foco_actual.etiqueta == "Canal 12")
+        primero = next(c for c in self.renderizados if c.etiqueta == "Canal 2")
+        self.onFocus(primero.getId())
+        self.onFocus(primero.vecinos[0].getId())
+        comprobar("guía: la flecha arriba al inicio recupera la fila anterior",
+                  self.pagina == 0 and self.foco_actual.etiqueta == "Canal 1")
+        self.onAction(types.SimpleNamespace(getId=lambda: 105))
+        comprobar("guía: la rueda del ratón desplaza los canales",
+                  self.pagina == 1 and self.foco_actual.etiqueta == "Canal 12")
+        self.onAction(types.SimpleNamespace(getId=lambda: 104))
         self.onAction(types.SimpleNamespace(getId=lambda: 6))
         comprobar("guía compacta: el avance de página lleva a los canales restantes",
                   "Canal 12" in [c.etiqueta for c in self.renderizados]
