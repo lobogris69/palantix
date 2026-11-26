@@ -47,7 +47,7 @@ def preparar(items, guia):
     for alias, clave in ALIASES_ES.items():
         if alias in indice:
             indice.setdefault(clave, indice[alias])
-    canales, internos = {}, defaultdict(list)
+    canales, internos, logos = {}, defaultdict(list), {}
     for titulo, enlace in deportes.CANALES:
         id_guia = indice.get(clave_canal(titulo)) or epg.IDS_PALANTIX.get(titulo, titulo)
         canales[id_guia] = (titulo, enlace)
@@ -66,6 +66,8 @@ def preparar(items, guia):
             cid = id_guia or nombres.get(clave_canal(titulo)) or "canal:" + clave_canal(titulo)
             if cid not in vistos:
                 canales[cid] = (canales.get(cid, (titulo, enlace))[0], enlace)
+                if item.get("poster"):
+                    logos[cid] = item["poster"]
                 vistos.add(cid)
         else:
             grupo = item["grupo"] or "Sin grupo"
@@ -73,4 +75,4 @@ def preparar(items, guia):
             if clave not in vistos:
                 internos[grupo].append(item)
                 vistos.add(clave)
-    return canales, dict(internos)
+    return canales, dict(internos), logos
