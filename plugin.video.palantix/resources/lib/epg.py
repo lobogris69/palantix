@@ -2,9 +2,11 @@
 import gzip
 import json
 import os
+import re
 import tempfile
 import time
 import urllib.request
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from xml.etree import ElementTree
@@ -48,16 +50,23 @@ def leer_xml(origen, ahora):
     return {"nombres": nombres, "programas": {k: sorted(v) for k, v in programas.items()}}
 
 
+def leer_cache(cache):
+    try:
+        datos = json.loads((Path(cache) / "epg-doblem.json").read_text(encoding="utf-8"))
+        if isinstance(datos, dict) and all(isinstance(datos.get(k), dict) for k in ("nombres", "programas")):
+            return datos
+    except (OSError, ValueError):
+        return None
+
+
 def cargar(cache, ahora=None):
     ahora = time.time() if ahora is None else ahora
     ruta = Path(cache) / "epg-doblem.json"
-    datos = None
+    datos = leer_cache(cache)
     try:
-        with ruta.open(encoding="utf-8") as f:
-            datos = json.load(f)
-        if ahora - ruta.stat().st_mtime < TTL:
+        if datos is not None and ahora - ruta.stat().st_mtime < TTL:
             return datos
-    except (OSError, ValueError):
+    except OSError:
         pass
 
     try:
@@ -86,14 +95,26 @@ def cargar(cache, ahora=None):
 
 
 def normalizar(nombre):
-    return " ".join(nombre.casefold().split())
+    texto = unicodedata.normalize("NFKD", nombre.casefold())
+    texto = "".join(c for c in texto if not unicodedata.combining(c))
+    return " ".join(re.findall(r"[^\W_]+", texto))
+
+
+def nombre_canal(nombre):
+    partes = normalizar(nombre).split()
+    if partes and partes[0] in ("es", "esp", "espana", "spain"):
+        partes.pop(0)
+    while partes and partes[-1] in ("es", "esp", "hd", "fhd", "sd", "uhd", "4k", "1080p", "720p", "1080", "720", "tv"):
+        partes.pop()
+    return " ".join(partes)
 
 
 def indice_nombres(datos):
     indice = {}
     for canal, nombres in datos["nombres"].items():
         for nombre in [canal] + nombres:
-            indice.setdefault(normalizar(nombre), set()).add(canal)
+            for clave in {nombre_canal(nombre), normalizar(nombre)} - {""}:
+                indice.setdefault(clave, set()).add(canal)
     return {nombre: next(iter(ids)) for nombre, ids in indice.items() if len(ids) == 1}
 
 

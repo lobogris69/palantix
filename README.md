@@ -42,10 +42,11 @@ A partir de ahí las versiones nuevas llegan solas.
   y la duración máxima de cada persona. Marca las películas que ya vio cada perfil
   mediante el menú contextual. La selección conjunta aplica ambos géneros, la
   duración más corta y excluye lo que ambos marcaron como visto.
-- **Deportes → Cuadrícula de Palantix** muestra bloques de tres horas y páginas de
-  cinco canales con datos de dobleM. Permite abrir la emisión activa o recordar
-  una futura. Usa las señales de la Guía TV, incluidos los canales de EKHorus que
-  puedan asociarse con dobleM.
+- **TV** abre la cuadrícula de canales españoles con datos de dobleM. Permite
+  abrir la emisión activa o recordar una futura. Si falta programación, la
+  casilla del canal queda en blanco y se puede pulsar para abrir su señal.
+- **TV internacional** presenta los canales de tus listas por grupo. Las listas
+  y la agenda se gestionan desde **TV → Opciones de TV**.
 
 **Inicio, avisos y perfiles**
 - En Ajustes → Catálogo puedes priorizar capítulos nuevos, ocultar las
@@ -75,8 +76,8 @@ A partir de ahí las versiones nuevas llegan solas.
   Si está disponible pyqrcode con soporte PNG, también se muestra el QR. Confirma
   cualquier importación en la tele.
 
-**Deportes**
-- La agenda agrupa **Hoy**, **Eventos en directo** y **Próximos eventos**. Una
+**Opciones de TV**
+- La agenda deportiva agrupa **Hoy**, **Eventos en directo** y **Próximos eventos**. Una
   lista JSON de deportes también puede usar el campo raíz `eventos`. Cada
   entrada admite `inicio` y `fin` en ISO 8601, `canal` y
   `resultado_en_titulo` para ocultar títulos con marcador. Para un evento
@@ -84,8 +85,10 @@ A partir de ahí las versiones nuevas llegan solas.
 - **Guía TV** muestra qué emite cada canal ahora y a continuación con los horarios
   de [EPG dobleM](https://github.com/davidmuma/EPG_dobleM). Pulsa el canal para verlo en directo.
   Las horas se muestran en la zona horaria de Kodi y la programación se guarda durante cuatro horas.
-- Si exportas canales a TV desde EKHorus, Palantix añade los que coincidan de
-  forma inequívoca con un nombre de la guía.
+- Palantix lee las listas que añadas en **Mis fuentes** y la exportación de TV de
+  EKHorus. Para identificar canales españoles, tiene en cuenta campos M3U como
+  `tvg-country="ES"` y `group-title="España"`, además del identificador y el
+  nombre del canal en la guía.
 - **Canales en directo** incluye Teledeporte, Esport3 y Top Barça. Real Madrid TV conserva su programación en la guía y se puede abrir si coincide con un canal exportado desde EKHorus.
   La disponibilidad de cada señal depende del canal y de la ubicación.
 - En **Mis fuentes** puedes pegar un enlace Ace Stream, un código de 40 caracteres

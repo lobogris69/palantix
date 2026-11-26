@@ -78,7 +78,10 @@ def cargar(t, carpeta, tipo, opciones, sid=None):
         if fila and ahora - fila[0] < 900:
             return json.loads(fila[1]), False
         try:
-            datos = t.serie(sid) if sid else t.explorar(tipo, opciones)
+            if sid is not None:
+                datos = t.detalle(sid) if tipo == "movie" else t.serie(sid)
+            else:
+                datos = t.explorar(tipo, opciones)
         except (OSError, ValueError):
             if fila:
                 return json.loads(fila[1]), True

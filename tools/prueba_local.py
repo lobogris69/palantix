@@ -43,6 +43,7 @@ AJUSTES = {"tmdb_key": "clave-prueba", "lista_1": LISTA_JSON, "lista_2": LISTA_M
            "cache_min": "60", "prov_archive_org": "false", "prov_listas": "true",
            "idioma_pref": "0", "calidad_max": "0", "solo_idioma": "false", "autoplay": "false", "inicio_plataforma": "false", "preguntado_idioma": "true"}
 TMDB_FALSO = {
+    "/movie/653": {"poster_path": "/nosferatu.jpg", "backdrop_path": "/nosferatu-fondo.jpg"},
     "/discover/movie": {"page": 1, "total_pages": 3, "results": [{"id": 1, "title": "Peli A", "release_date": "2001-01-01"}]},
     "/search/tv": {"page": 1, "total_pages": 1, "results": [
         {"id": 100, "name": "Ficción", "original_name": "Fiction", "first_air_date": "2020-01-01"}]},
@@ -89,7 +90,7 @@ class ListItem:
     def setLabel(self, l): self.label = l
     def getLabel(self): return self.label
 
-    def setArt(self, d): pass
+    def setArt(self, d): self.arte = d
     def setProperty(self, k, v): self.props[k] = v
     def addContextMenuItems(self, m): self.menu = m
     def getVideoInfoTag(self):
@@ -121,7 +122,7 @@ _mod("xbmc", LOGINFO=1, log=lambda m, l=0: print("   LOG", m),
 _mod("xbmcvfs", translatePath=lambda p: TMP)
 _mod("xbmcaddon", Addon=lambda: types.SimpleNamespace(
     getSetting=lambda k: AJUSTES.get(k, ""), setSetting=lambda k, v: AJUSTES.__setitem__(k, v), getAddonInfo=lambda k: TMP, openSettings=lambda: None))
-_mod("xbmcgui", ListItem=ListItem, NOTIFICATION_INFO=0, Window=_Ventana,
+_mod("xbmcgui", ListItem=ListItem, NOTIFICATION_INFO=0, NOTIFICATION_WARNING=1, Window=_Ventana,
      DialogProgress=lambda: types.SimpleNamespace(create=lambda *a: None, close=lambda: None,
                                                  update=lambda *a: None, iscanceled=lambda: False),
      Dialog=lambda: types.SimpleNamespace(
@@ -136,7 +137,7 @@ _mod("xbmcplugin", SORT_METHOD_LABEL=1, SORT_METHOD_VIDEO_YEAR=2, SORT_METHOD_UN
      setResolvedUrl=lambda h, ok, li: (REGISTRO.__setitem__("resuelto", (ok, li.path)), REGISTRO.__setitem__("li", li)))
 
 
-def abrir(consulta="", pedir_trakt=None):
+def abrir(consulta="", pedir_trakt=None, mostrar_guia=None):
     REGISTRO.update(items=[], resuelto=None, avisos=[], selector=None)
     del LIS[:]
     sys.argv = ["plugin://plugin.video.palantix/", "1", consulta]
@@ -147,6 +148,9 @@ def abrir(consulta="", pedir_trakt=None):
     if pedir_trakt:
         from resources.lib.trakt import Trakt
         Trakt._pedir = lambda self, metodo, ruta, cuerpo=None: pedir_trakt(metodo, ruta)
+    if mostrar_guia:
+        from resources.lib import cuadricula_tv
+        cuadricula_tv.mostrar = mostrar_guia
     runpy.run_path(os.path.join(RAIZ, "main.py"), run_name="__main__")
     return REGISTRO
 
@@ -165,7 +169,9 @@ from urllib.parse import urlencode  # noqa: E402
 r = abrir("")
 comprobar("menú principal incluye Cine libre y documentales",
           any(i[0] == "Cine libre y documentales" for i in r["items"]))
-comprobar("menú principal incluye Deportes", any(i[0] == "Deportes" for i in r["items"]))
+comprobar("menú principal ofrece TV y TV internacional",
+          any(titulo == "TV" and u.endswith("?accion=tv") for titulo, u in r["items"])
+          and any(i[0] == "TV internacional" for i in r["items"]))
 r = abrir("?accion=deportes")
 comprobar("Deportes ofrece agenda, canales y fuentes",
           [i[0] for i in r["items"]] == ["Hoy", "Eventos en directo", "Próximos eventos", "Detener reproducción", "Canales en directo", "Guía TV", "Cuadrícula de Palantix", "Mis fuentes"])
@@ -240,13 +246,18 @@ try:
     epg_cache.mkdir(exist_ok=True)
     hora = time()
     Path(epg_cache, "epg-doblem.json").write_text(json.dumps({
-        "nombres": {"Teledeporte": ["Teledeporte HD"]},
+        "nombres": {"Teledeporte": ["Teledeporte HD"], "La 1 HD": ["La 1"]},
         "programas": {"Teledeporte": [[hora - 60, hora + 60, "Partido"]]},
     }), encoding="utf-8")
     exportacion = Path(TMP, "ekhorus.m3u")
     enlace = "plugin://script.module.horus/?" + quote(b64encode(
         repr({"action": "play", "infohash": cid, "motor": 1}).encode()))
-    exportacion.write_text("#EXTM3U\n#EXTINF:-1,Teledeporte HD\n" + enlace + "\n", encoding="utf-8")
+    exportacion.write_text("#EXTM3U\n#EXTINF:-1,Teledeporte HD\n" + enlace +
+                           '\n#EXTINF:-1 group-title="España",Canal local\nhttps://ejemplo.invalid/local.m3u8\n'
+                           '#EXTINF:-1 group-title="Chile, Noticias" tvg-country="CL",La 1 HD\n'
+                           "https://ejemplo.invalid/chile.m3u8\n"
+                           '#EXTINF:-1 group-title="España",ES | TVE 1 UHD\nhttps://ejemplo.invalid/tve.m3u8\n',
+                           encoding="utf-8")
     vfs = sys.modules["xbmcvfs"]
     traducir = vfs.translatePath
     try:
@@ -261,6 +272,23 @@ try:
                   any(t.startswith("Real Madrid TV") and "Sin señal directa" in t and not u for t, u in r["items"]))
         comprobar("Guía: conserva el directo si no está exportado",
                   any(t.startswith("Esport3") and "deportes_play" in u for t, u in r["items"]))
+        r = abrir("?accion=tv_internacional")
+        comprobar("TV internacional agrupa y no mezcla los canales de España",
+                  [titulo for titulo, _ in r["items"]] == ["Chile, Noticias (1)"])
+        r = abrir("?" + urlencode({"accion": "tv_internacional", "grupo": "Chile, Noticias"}))
+        comprobar("TV internacional deja elegir el canal del grupo",
+                  len(r["items"]) == 1 and "chile.m3u8" in r["items"][0][1])
+
+        def mostrar_guia(addon, canales, programas, hora, ocultar, seleccionar):
+            comprobar("TV entra directamente a la guía española y normaliza el nombre de La 1",
+                      canales.get("La 1 HD", (None, None))[1] == "https://ejemplo.invalid/tve.m3u8"
+                      and all("chile.m3u8" not in u for _, u in canales.values()))
+            canal, directo = next(v for v in canales.values() if v[0] == "Canal local")
+            return not seleccionar(canal, directo, hora, hora + 100, "")
+
+        abrir("?accion=tv", mostrar_guia=mostrar_guia)
+        comprobar("TV permite reproducir una fila sin programación",
+                  REGISTRO["builtin"][-1].startswith("PlayMedia(") and "local.m3u8" in REGISTRO["builtin"][-1])
     finally:
         vfs.translatePath = traducir
 
@@ -421,6 +449,28 @@ rep.vigilar()
 comprobar("servicio: a 20 s del final lanza el siguiente capítulo", REGISTRO["builtin"] and "e=2" in REGISTRO["builtin"][0])
 rep.vigilar()
 comprobar("servicio: no lo ofrece dos veces", len(REGISTRO["builtin"]) == 1)
+
+# Un error intermedio de Kodi se descarta si el vídeo acaba arrancando.
+rep = servicio["Reproductor"]()
+rep.isPlayingVideo = lambda: False
+reloj = servicio["time"]
+PROPIEDADES["palantix.meta"] = json.dumps({"inicio_solicitado": reloj.time()})
+with patch.object(reloj, "monotonic", return_value=100):
+    rep.onPlayBackError()
+rep.isPlayingVideo = lambda: True
+with patch.object(reloj, "monotonic", return_value=104):
+    rep.comprobar_error()
+comprobar("un aviso transitorio no aparece mientras el canal se reproduce",
+          not PROPIEDADES.get("palantix.ultimo_error") and rep.error_pendiente is None)
+rep.isPlayingVideo = lambda: False
+with patch.object(reloj, "monotonic", return_value=105):
+    rep.onPlayBackError()
+with patch.object(reloj, "monotonic", return_value=109):
+    rep.comprobar_error()
+comprobar("el servicio mantiene el aviso cuando Kodi realmente se queda sin vídeo",
+          bool(PROPIEDADES.get("palantix.ultimo_error")) and
+          any("Kodi no pudo" in aviso for aviso in REGISTRO["avisos"]))
+PROPIEDADES.pop("palantix.ultimo_error", None)
 
 # ---------------------------------------------------------------- seguimiento de series
 from resources.lib import seguimiento as sg  # noqa: E402

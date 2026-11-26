@@ -49,31 +49,35 @@ def mostrar(addon, canales, programas, hora, ocultar, seleccionar):
                 boton(300, 130, 235, 60, "Horas  ▶", self.mover, (1, 0)),
                 boton(560, 130, 235, 60, "▲  Canales", self.mover, (0, -1)),
                 boton(805, 130, 235, 60, "Canales  ▼", self.mover, (0, 1)),
+                boton(1050, 130, 235, 60, "Opciones de TV", self.abrir_opciones, ()),
             ]
             fecha = datetime.fromtimestamp(self.inicio).strftime("%d/%m/%Y")
-            agregar(xbmcgui.ControlLabel(1180, 135, 650, 50, fecha, font="font27"))
+            agregar(xbmcgui.ControlLabel(1450, 135, 390, 50, fecha, font="font27"))
             for h in range(6):
                 reloj = datetime.fromtimestamp(self.inicio + h * 1800).strftime("%H:%M")
                 agregar(xbmcgui.ControlLabel(IZQUIERDA + h * ANCHO // 6, 220, 225, 50, reloj, font="font13"))
             filas = [[(55 + i * 250, b) for i, b in enumerate(botones)]]
+            primer_canal = None
             recorte = list(canales.items())[self.pagina:self.pagina + CANALES_POR_PAGINA]
             for indice, (cid, (nombre, enlace)) in enumerate(recorte):
                 y = 290 + indice * 125
                 agregar(xbmcgui.ControlLabel(65, y + 20, 285, 65, nombre, font="font13"))
                 bloques = tramos(programas.get(cid, []), self.inicio) or [
-                    (IZQUIERDA, ANCHO, self.inicio, self.inicio + DURACION, "Sin programación")]
+                    (IZQUIERDA, ANCHO, self.inicio, self.inicio + DURACION, "")]
                 controles = []
                 for x, ancho, inicio, fin, titulo in bloques:
                     if ancho < 7:
                         continue
-                    if ocultar and fin <= hora:
+                    if titulo and ocultar and fin <= hora:
                         titulo = "Programa anterior"
                     argumentos = (nombre, enlace, inicio, fin, titulo)
                     reloj = datetime.fromtimestamp(inicio).strftime("%H:%M")
                     n = max(2, (ancho - 12) // 13)
                     corta = titulo[:n - 1] + "…" if len(titulo) > n else titulo
-                    etiqueta = (reloj + "  " + corta) if ancho >= 140 else corta
+                    etiqueta = ((reloj + "  " + corta) if ancho >= 140 else corta) if titulo else ""
                     control = boton(x, y, ancho - 3, 88, etiqueta, self.programa, argumentos)
+                    if primer_canal is None and (not titulo or inicio <= hora < fin):
+                        primer_canal = control
                     controles.append((x + ancho // 2, control))
                 if controles:
                     filas.append(controles)
@@ -88,7 +92,7 @@ def mostrar(addon, canales, programas, hora, ocultar, seleccionar):
             if self.inicio <= hora < self.inicio + DURACION:
                 x = IZQUIERDA + int((hora - self.inicio) * ANCHO / DURACION)
                 agregar(xbmcgui.ControlLabel(x, 268, 120, 35, "▾ AHORA", font="font13", textColor="FF76D6FF"))
-            self.setFocus(botones[self.foco])
+            self.setFocus((primer_canal or botones[0]) if self.foco is None else botones[self.foco])
 
         def mover(self, horas, canales_delta):
             self.foco = (1 if horas > 0 else 0) if horas else (3 if canales_delta > 0 else 2)
@@ -99,6 +103,10 @@ def mostrar(addon, canales, programas, hora, ocultar, seleccionar):
                 if 0 <= pagina < len(canales):
                     self.pagina = pagina
             self.dibujar()
+
+        def abrir_opciones(self):
+            self.opciones = True
+            self.close()
 
         def programa(self, *args):
             if seleccionar(*args):
@@ -114,6 +122,7 @@ def mostrar(addon, canales, programas, hora, ocultar, seleccionar):
                 accion(*argumentos)
 
     ventana = Guia("palantix-guia.xml", addon.getAddonInfo("path"), "default", "1080i")
-    ventana.foco = 0
+    ventana.foco = None
+    ventana.opciones = False
     ventana.doModal()
-    del ventana
+    return ventana.opciones
