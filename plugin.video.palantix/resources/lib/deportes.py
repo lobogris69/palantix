@@ -2,8 +2,10 @@
 import ast
 import base64
 import binascii
+import json
 import re
 from datetime import datetime
+from pathlib import Path
 from urllib.parse import quote, unquote, urlencode, urlsplit
 
 HORUS = "script.module.horus"
@@ -43,17 +45,17 @@ def ruta_catalogo_ekhorus():
     return "plugin://%s/?%s" % (HORUS, quote(consulta))
 
 
-def ruta_canal_ekhorus(enlace):
-    """Adapta una entrada reproducible de la exportación TV de EKHorus."""
+def datos_canal_ekhorus(enlace):
+    """Valida los parámetros reproducibles de un canal que exportó EKHorus."""
     prefijo = "plugin://%s/?" % HORUS
     if not enlace.startswith(prefijo) or len(enlace) > 4096:
-        return ""
+        return None
     try:
         item = ast.literal_eval(base64.b64decode(unquote(enlace[len(prefijo):]), validate=True).decode())
     except (ValueError, SyntaxError, binascii.Error, RecursionError):
-        return ""
+        return None
     if not isinstance(item, dict) or item.get("action") != "play":
-        return ""
+        return None
     for campo in ("infohash", "id"):
         valor = item.get(campo)
         cid = ace_id(valor) if isinstance(valor, str) else ""
@@ -62,8 +64,42 @@ def ruta_canal_ekhorus(enlace):
             canal = {"action": "play", campo: cid, "origen": "tv"}
             if item.get("motor") == 1:
                 canal["motor"] = 1
-            return prefijo + quote(base64.b64encode(repr(canal).encode()).decode(), safe="")
-    return ""
+            return canal
+    return None
+
+
+def ruta_canal_ekhorus(enlace):
+    canal = datos_canal_ekhorus(enlace)
+    if canal is None:
+        return ""
+    return "plugin://%s/?%s" % (HORUS, quote(base64.b64encode(repr(canal).encode()).decode(), safe=""))
+
+
+def ruta_exportar_ekhorus():
+    consulta = base64.b64encode(b"{'action': 'tv_exportar'}").decode()
+    return "plugin://%s/?%s" % (HORUS, quote(consulta, safe=""))
+
+
+def paises_canal_ekhorus(ruta):
+    """Lee el país por identificador de la caché local del complemento."""
+    try:
+        catalogo = json.loads(Path(ruta).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    filas = catalogo.get("canales") if isinstance(catalogo, dict) else None
+    if not isinstance(filas, list):
+        return {}
+    paises = {}
+    for fila in filas:
+        if not isinstance(fila, dict) or not isinstance(fila.get("paises"), list):
+            continue
+        hash_canal = fila.get("infohash")
+        if not isinstance(hash_canal, str) or not ace_id(hash_canal):
+            continue
+        codigos = [p for p in fila["paises"] if isinstance(p, str) and p]
+        if codigos:
+            paises[ace_id(hash_canal)] = " ".join(codigos)
+    return paises
 
 
 def inicio_evento(valor):
