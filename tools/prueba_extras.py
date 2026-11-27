@@ -313,6 +313,7 @@ class ElementoVisual:
         self.tag = types.SimpleNamespace(setPlot=lambda plot: None, setResumePoint=lambda *args: None)
 
     def setArt(self, arte): self.arte = arte
+    def getLabel(self): return self.etiqueta
     def setProperty(self, clave, valor): self.propiedades[clave] = valor
     def getProperty(self, clave): return self.propiedades.get(clave, "")
     def getVideoInfoTag(self): return self.tag
@@ -385,6 +386,56 @@ addon_generos = types.SimpleNamespace(getAddonInfo=lambda k: "", getSetting=lamb
 with patch.dict(sys.modules, {"xbmcgui": gui_generos,
                               "xbmc": types.SimpleNamespace(executebuiltin=abiertos_genero.append)}):
     inicio.abrir(addon_generos, PP, TPestanas(), url, cargar_exploracion=resultados_genero)
+
+class VentanaSubmenus(VentanaInicioPrueba):
+    def getFocusId(self): return self.foco
+
+    def doModal(self):
+        self.onInit()
+        self.cargar("series")
+        self.setFocusId(106)
+        self.filas[106].selectItem(1)
+        serie = self.filas[106].getSelectedItem().etiqueta
+        self.onClick(106)
+        comprobar("submenús: las temporadas aparecen en el mismo menú visual",
+                  self.propiedades["pestana"] == serie and self.filas[103].items[0].etiqueta == "Temporada 1")
+        self.onClick(103)
+        comprobar("submenús: la temporada abre episodios panorámicos en la misma ventana",
+                  "Temporada 1" in self.propiedades["pestana"] and self.foco == 101
+                  and self.filas[101].items[0].etiqueta == "1x01. Piloto")
+        self.onAction(types.SimpleNamespace(getId=lambda: 92))
+        self.onAction(types.SimpleNamespace(getId=lambda: 92))
+        comprobar("submenús: Atrás vuelve a la serie seleccionada",
+                  self.foco == 106 and self.filas[106].getSelectedItem().etiqueta == serie)
+
+
+from resources.lib import menu_visual  # noqa: E402
+
+
+def directorio_visual_prueba(destino):
+    param = menu_visual.parametros(destino)
+    accion = param.get("accion")
+    if accion == "temporadas":
+        contenido, etiqueta, siguiente = "seasons", "Temporada 1", url(accion="capitulos", s=1, titulo=param["titulo"])
+    elif accion == "capitulos":
+        contenido, etiqueta, siguiente = "episodes", "1x01. Piloto", url(accion="reproducir", tipo="episodio", s=1, e=1)
+    else:
+        return None
+    item = ElementoVisual(etiqueta)
+    item.getArt = lambda k: "/p.jpg"
+    item.tag.getDuration = lambda: 90
+    item.tag.getPlot = lambda: ""
+    item.tag.getPlayCount = item.tag.getResumeTime = item.tag.getResumeTimeTotal = lambda: 0
+    directorio = menu_visual.Directorio(None)
+    directorio.contenido = contenido
+    directorio.items.append((siguiente, menu_visual.Elemento(item), contenido == "seasons"))
+    return directorio
+
+
+gui_generos.WindowXML = VentanaSubmenus
+with patch.dict(sys.modules, {"xbmcgui": gui_generos,
+                              "xbmc": types.SimpleNamespace(executebuiltin=abiertos_genero.append)}):
+    inicio.abrir(addon_generos, PP, TPestanas(), url, cargar_directorio=directorio_visual_prueba)
 
 print("\n%s" % ("TODO CORRECTO" if not fallos else "%d FALLOS" % fallos))
 sys.exit(1 if fallos else 0)

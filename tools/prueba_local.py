@@ -92,7 +92,9 @@ class ListItem:
     def getLabel(self): return self.label
 
     def setArt(self, d): self.arte = d
+    def getArt(self, k): return getattr(self, "arte", {}).get(k, "")
     def setProperty(self, k, v): self.props[k] = v
+    def getProperty(self, k): return self.props.get(k, "")
     def addContextMenuItems(self, m): self.menu = m
     def getVideoInfoTag(self):
         return self.tag
@@ -103,6 +105,14 @@ class _Tag:
         self.__dict__["datos"] = {}
 
     def __getattr__(self, nombre):  # acepta cualquier setXxx de InfoTagVideo y lo apunta
+        if nombre == "getPlot":
+            return lambda: self.datos.get("setPlot", ("",))[0]
+        if nombre in ("getResumeTime", "getResumeTimeTotal"):
+            return lambda: self.datos.get("setResumePoint", (0, 0))[nombre == "getResumeTimeTotal"]
+        if nombre == "getPlayCount":
+            return lambda: self.datos.get("setPlaycount", (0,))[0]
+        if nombre == "getDuration":
+            return lambda: self.datos.get("setDuration", (0,))[0]
         return lambda *a: self.datos.__setitem__(nombre, a)
 
 
@@ -138,7 +148,7 @@ _mod("xbmcplugin", SORT_METHOD_LABEL=1, SORT_METHOD_VIDEO_YEAR=2, SORT_METHOD_UN
      setResolvedUrl=lambda h, ok, li: (REGISTRO.__setitem__("resuelto", (ok, li.path)), REGISTRO.__setitem__("li", li)))
 
 
-def abrir(consulta="", pedir_trakt=None, mostrar_guia=None):
+def abrir(consulta="", pedir_trakt=None, mostrar_guia=None, mostrar_inicio=None):
     REGISTRO.update(items=[], resuelto=None, avisos=[], selector=None)
     del LIS[:]
     sys.argv = ["plugin://plugin.video.palantix/", "1", consulta]
@@ -152,6 +162,9 @@ def abrir(consulta="", pedir_trakt=None, mostrar_guia=None):
     if mostrar_guia:
         from resources.lib import cuadricula_tv
         cuadricula_tv.mostrar = mostrar_guia
+    if mostrar_inicio:
+        from resources.lib import inicio
+        inicio.abrir = mostrar_inicio
     runpy.run_path(os.path.join(RAIZ, "main.py"), run_name="__main__")
     return REGISTRO
 
@@ -908,6 +921,42 @@ with tempfile.TemporaryDirectory() as cache:
                   indice.filtrar([otro], cache, config) == ([otro], False))
         comprobar("una configuración distinta de idioma vuelve a comprobar",
                   indice.filtrar([otro], cache, (config[0], {"idioma": "LAT"})) == ([], True))
+
+def probar_menu_visual(addon, perfil, t, url, cargar_directorio, **kwargs):
+    from resources.lib import menu_visual
+
+    # runpy sustituye argv[0]; en Kodi es la URL base del complemento.
+    url.__globals__["BASE"] = "plugin://plugin.video.palantix/"
+    temporadas = cargar_directorio(url(accion="temporadas", id=100, titulo="Ficción"))
+    tarjetas, nombres = menu_visual.filas(temporadas, "/logo.png")
+    comprobar("submenús: el recorrido real entrega temporadas en carátulas con su fondo",
+              temporadas.correcto and nombres[103] == "Temporadas"
+              and len(tarjetas[103]) == 2 and tarjetas[103][0]["fanart"].endswith("/fondo.jpg"))
+    destino = tarjetas[103][0]["url"]
+    resultado = cargar_directorio(destino)
+    filas, _ = menu_visual.filas(resultado, "/logo.png")
+    episodios = filas[101]
+    comprobar("submenús: los capítulos conservan duración, portada, reproducción y acciones",
+              episodios[0]["info"].startswith("50 min") and episodios[0]["poster"].endswith("/serie.jpg")
+              and episodios[0]["tipo"] == "reproducir"
+              and any("Elegir fuente" == etiqueta for etiqueta, _ in episodios[0]["contexto"]))
+    marcar = next(comando[len("RunPlugin("):-1] for etiqueta, comando in episodios[1]["contexto"]
+                   if etiqueta in ("Marcar como visto", "Marcar como no visto"))
+    comprobar("submenús: marcar un capítulo actualiza sus datos sin abrir ni refrescar Kodi Videos",
+              cargar_directorio(marcar, mutacion=True).correcto and "Container.Refresh" not in REGISTRO["builtin"])
+    filas, _ = menu_visual.filas(cargar_directorio(destino), "/logo.png")
+    comprobar("submenús: el cambio aparece en la tarjeta al recargar el directorio",
+              filas[101][1]["destacado"] != episodios[1]["destacado"])
+    comprobar("submenús: también se adaptan directorios como el historial y los grupos de TV",
+              cargar_directorio(url(accion="historial_vistos")).correcto
+              and cargar_directorio(url(accion="tv_internacional")).correcto)
+    comprobar("submenús: los destinos ajenos quedan fuera de la captura",
+              cargar_directorio("plugin://script.module.horus/") is None)
+
+
+REGISTRO["builtin"] = []
+with patch.dict(AJUSTES, {"inicio_plataforma": "true"}):
+    abrir("", mostrar_inicio=probar_menu_visual)
 
 # Internet Archive real (necesita Internet)
 from resources.lib.providers import Peli  # noqa: E402

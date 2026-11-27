@@ -15,7 +15,7 @@ import xbmcplugin
 import xbmcvfs
 
 from resources.lib import ajustes_serie, avisos_fuentes, perfiles_casa, cuadricula_tv, deportes, disponibilidad, epg, etiquetas, explorar, fuentes_catalogo, listas, preferencias_copia
-from resources.lib import actualizar, debrid, historial, inicio, mislistas, novedades, progreso, seguimiento, subtitulos, trakt, tv
+from resources.lib import actualizar, debrid, historial, inicio, menu_visual, mislistas, novedades, progreso, seguimiento, subtitulos, trakt, tv
 from resources.lib import tmdb as tmdb_mod
 from resources.lib.providers import Peli
 from resources.lib.providers import cine_libre
@@ -203,9 +203,14 @@ def vista(contenido):
     xbmc.executebuiltin("Container.SetViewMode(%d)" % VISTAS[contenido][i])
 
 
+def refrescar_contenedor():
+    if not isinstance(xbmcplugin, menu_visual.Directorio):
+        xbmc.executebuiltin("Container.Refresh")
+
+
 def fin_listado(contenido=None, ok=True):
     xbmcplugin.endOfDirectory(HANDLE, succeeded=ok, cacheToDisc=False)
-    if ok and contenido:
+    if ok and contenido and not isinstance(xbmcplugin, menu_visual.Directorio):
         vista(contenido)
 
 
@@ -380,7 +385,7 @@ def lista_avisos_fuentes():
 
 def quitar_aviso_fuente():
     avisos_fuentes.quitar(PERFIL, PARAMS["id"])
-    xbmc.executebuiltin("Container.Refresh")
+    refrescar_contenedor()
 
 
 def accion_donde_ver(li, tipo, tid):
@@ -415,7 +420,7 @@ def lista_avisos_plataforma():
 
 def quitar_aviso_plataforma():
     avisos_fuentes.quitar_plataformas(PERFIL, PARAMS["id"])
-    xbmc.executebuiltin("Container.Refresh")
+    refrescar_contenedor()
 
 
 def donde_ver(t):
@@ -1046,7 +1051,7 @@ def a_medias():
 
 def quitar_medias():
     progreso.quitar(PERFIL, PARAMS["k"])
-    xbmc.executebuiltin("Container.Refresh")
+    refrescar_contenedor()
 
 
 def _fichas_tmdb(t, elementos):
@@ -1093,7 +1098,7 @@ def trakt_cambiar_pendiente():
     except (OSError, ValueError, trakt.TraktError):
         return aviso("No se pudo actualizar la lista de Trakt")
     aviso("Pendientes de Trakt actualizados")
-    xbmc.executebuiltin("Container.Refresh")
+    refrescar_contenedor()
 
 
 def menu_trakt():
@@ -1188,7 +1193,7 @@ def trakt_lista(t):
 def dejar_seguir():
     seguimiento.quitar(PERFIL, PARAMS["id"])
     aviso("Quitada de seguimiento")
-    xbmc.executebuiltin("Container.Refresh")
+    refrescar_contenedor()
 
 
 def temporadas(t):
@@ -1244,7 +1249,8 @@ def capitulos(t):
             nombre += "  " + color("Con fuente", VERDE)
         li = xbmcgui.ListItem(nombre)
         li.setArt({"thumb": tmdb_mod.TMDB.imagen(ep.get("still_path"), "w300") if not spoiler else "",
-                   "poster": tmdb_mod.TMDB.imagen(temp.get("poster_path"))})
+                   "poster": tmdb_mod.TMDB.imagen(temp.get("poster_path") or PARAMS.get("poster")),
+                   "fanart": tmdb_mod.TMDB.imagen(PARAMS.get("fondo"), "w1280")})
         tag = li.getVideoInfoTag()
         tag.setMediaType("episode")
         tag.setTitle(titulo_episodio)
@@ -1299,7 +1305,7 @@ def marcar_capitulo():
                     pass
         except (OSError, ValueError, trakt.TraktError):
             aviso("Guardado en Palantix. Falló la sincronización con Trakt.")
-    xbmc.executebuiltin("Container.Refresh")
+    refrescar_contenedor()
 
 
 def historial_vistos():
@@ -1345,7 +1351,7 @@ def historial_vistos():
     if not vistos:
         aviso("Aún no hay títulos en este historial")
     fin_listado()
-    if vistos and xbmc.getSkinDir() == "skin.estuary":
+    if vistos and xbmc.getSkinDir() == "skin.estuary" and not isinstance(xbmcplugin, menu_visual.Directorio):
         xbmc.executebuiltin("Container.SetViewMode(50)")
 
 
@@ -1365,7 +1371,7 @@ def valorar_visto():
         return aviso("No se pudo guardar el título en el historial")
     aviso("Valoración guardada" if nota is not None else "Título añadido al historial")
     if not nuevo:
-        xbmc.executebuiltin("Container.Refresh")
+        refrescar_contenedor()
 
 
 def favoritas():
@@ -1378,7 +1384,7 @@ def fav_cambiar(poner):
         favs.insert(0, json.loads(PARAMS["datos"]))
     guardar_favoritas(favs)
     aviso("Añadida a Favoritas" if poner else "Quitada de Favoritas")
-    xbmc.executebuiltin("Container.Refresh")
+    refrescar_contenedor()
 
 
 def catalogo_cine_libre():
@@ -1658,7 +1664,7 @@ def anadir_fuente_deportes():
     nombre = dialogo.input("Nombre de la fuente", sugerido) or sugerido
     if not mislistas.anadir(perfil_deportes(), nombre, origen):
         return aviso("Esa fuente ya está añadida")
-    xbmc.executebuiltin("Container.Refresh")
+    refrescar_contenedor()
 
 
 def quitar_fuente_deportes():
@@ -1666,7 +1672,7 @@ def quitar_fuente_deportes():
         if fuente["origen"] == PARAMS.get("u"):
             if xbmcgui.Dialog().yesno("Deportes", "¿Quitar «%s»?" % fuente["nombre"]):
                 mislistas.quitar(perfil_deportes(), i)
-                xbmc.executebuiltin("Container.Refresh")
+                refrescar_contenedor()
             return
 
 
@@ -1853,7 +1859,7 @@ def lista_nueva():
     if not mislistas.anadir(PERFIL, nombre, origen):
         return aviso("Esa lista ya estaba añadida")
     xbmcgui.Dialog().ok("Palantix", "Lista «%s» añadida: %d título%s." % (nombre, len(items), "" if len(items) == 1 else "s"))
-    xbmc.executebuiltin("Container.Refresh")
+    refrescar_contenedor()
 
 
 def lista_renombrar():
@@ -1862,7 +1868,7 @@ def lista_renombrar():
     nombre = xbmcgui.Dialog().input("Nuevo nombre", actual)
     if nombre:
         mislistas.renombrar(PERFIL, i, nombre)
-        xbmc.executebuiltin("Container.Refresh")
+        refrescar_contenedor()
 
 
 def lista_recargar():
@@ -1872,7 +1878,7 @@ def lista_recargar():
     if os.path.exists(ruta):
         os.remove(ruta)
     aviso("Lista recargada")
-    xbmc.executebuiltin("Container.Refresh")
+    refrescar_contenedor()
 
 
 def lista_quitar():
@@ -1880,7 +1886,7 @@ def lista_quitar():
     l = mis_listas_guardadas()[i]
     if xbmcgui.Dialog().yesno("Palantix", "¿Quitar la lista «%s»?" % l["nombre"]):
         mislistas.quitar(PERFIL, i)
-        xbmc.executebuiltin("Container.Refresh")
+        refrescar_contenedor()
 
 
 def kodi_en_espanol(preguntar=False):
@@ -2514,6 +2520,37 @@ def buscar_actualizacion():
 
 
 
+def cargar_menu_visual(t, destino, mutacion=False):
+    """Ejecuta una ruta de listado con un destino de presentación en memoria."""
+    global PARAMS, xbmcplugin, xbmcgui
+    datos = menu_visual.parametros(destino)
+    accion = datos.get("accion")
+    if mutacion:
+        if accion not in SIN_TMDB or not menu_visual.es_mutacion(destino):
+            return None
+    elif accion not in menu_visual.TITULOS:
+        return None
+    antes = PARAMS, xbmcplugin, xbmcgui
+    directorio = menu_visual.Directorio(xbmcplugin)
+    PARAMS, xbmcplugin, xbmcgui = datos, directorio, menu_visual.GUI(xbmcgui)
+    _CACHE.clear()
+    try:
+        if accion in SIN_TMDB:
+            SIN_TMDB[accion]()
+        elif t is not None:
+            con_tmdb(t, accion, max(1, int(datos.get("page", 1))))
+        else:
+            aviso("Configura TMDB para abrir este apartado")
+            directorio.correcto = False
+    except (OSError, ValueError, sqlite3.Error, KeyError):
+        log("No se pudo cargar el apartado visual " + accion)
+        aviso("No se pudo cargar este apartado")
+        directorio.correcto = False
+    finally:
+        PARAMS, xbmcplugin, xbmcgui = antes
+    return directorio
+
+
 def abrir_inicio():
     """Pantalla de inicio estilo plataforma. Se cierra el listado vacío y se abre la ventana encima."""
     xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
@@ -2525,7 +2562,8 @@ def abrir_inicio():
     try:
         inicio.abrir(ADDON, PERFIL, t, url, favoritas=leer_favoritas(), con_trakt=tk, log=log,
                      filtrar_peliculas=peliculas_disponibles,
-                     cargar_exploracion=lambda parametros, pagina: resultados_explorar(t, pagina, parametros))
+                     cargar_exploracion=lambda parametros, pagina: resultados_explorar(t, pagina, parametros),
+                     cargar_directorio=lambda destino, mutacion=False: cargar_menu_visual(t, destino, mutacion))
     except Exception as e:  # si la pantalla nueva fallase en alguna tele, que no te quedes sin Palantix
         log("Inicio falló, abro el menú clásico: %s" % e)
         xbmc.executebuiltin("Container.Update(%s)" % url(accion="clasico"))
