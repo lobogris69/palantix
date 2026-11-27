@@ -1,6 +1,7 @@
 """Filtros del explorador de TMDB y caché de sus páginas."""
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
+from dataclasses import dataclass
 import json
 import os
 import sqlite3
@@ -11,11 +12,46 @@ DURACIONES = {"0": "Cualquier duración", "99": "Menos de 100 min", "120": "Hast
 ESTADOS = {"todos": "Todas", "emision": "En emisión", "terminadas": "Terminadas", "seguimiento": "En seguimiento"}
 FUENTES = {"todas": "Todas", "confirmadas": "Con fuente confirmada", "pendientes": "Por comprobar"}
 GEN_DESTACADOS = {
-    "movie": [(28, "Acción"), (35, "Comedia"), (878, "Ciencia ficción"), (27, "Terror"),
-              (53, "Suspense"), (99, "Documental")],
+    "movie": [(28, "Acción"), (35, "Comedia"), (53, "Suspense"), (12, "Aventura"),
+              (18, "Drama"), (878, "Ciencia ficción"), (27, "Terror"), (80, "Crimen"),
+              (16, "Animación"), (14, "Fantasía"), (10749, "Romance"), (9648, "Misterio"),
+              (10751, "Familiar"), (99, "Documental")],
     "tv": [(18, "Drama"), (35, "Comedia"), (10765, "Ciencia ficción y fantasía"),
            (80, "Crimen"), (16, "Animación"), (99, "Documental")],
 }
+
+
+@dataclass
+class Resultados:
+    filas: list
+    total: int
+    guardados: bool
+    confirmadas: set
+    pendientes: set
+
+    def estado_de(self, tid):
+        tid = str(tid)
+        if tid in self.confirmadas:
+            return "Con fuente confirmada"
+        return "Por comprobar" if tid in self.pendientes else "Sin fuente confirmada"
+
+
+def campos_filtro(tipo):
+    orden = ("orden", "Orden", ORDENES)
+    if tipo == "movie":
+        return [orden, ("duracion", "Duración", DURACIONES), ("fuente", "Disponibilidad", FUENTES)]
+    return [orden, ("estado", "Estado", ESTADOS)]
+
+
+def elegir_filtros(tipo, parametros, seleccionar):
+    elegidos = filtros(parametros)
+    for clave, titulo, opciones in campos_filtro(tipo):
+        claves = list(opciones)
+        n = seleccionar(titulo, list(opciones.values()), preselect=claves.index(elegidos[clave]))
+        if n < 0:
+            return None
+        elegidos[clave] = claves[n]
+    return elegidos
 
 
 def filtros(parametros):

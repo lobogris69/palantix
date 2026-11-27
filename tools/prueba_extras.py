@@ -297,5 +297,94 @@ comprobar("pestañas: títulos de las filas", inicio.titulos("series")[110] == "
 comprobar("menú lateral: Películas y Series cambian de pestaña sin salir",
           [(m[0], m[2], m[3]) for m in inicio.menu(url)][3:5] == [("Películas", "pestana", "peliculas"), ("Series", "pestana", "series")])
 
+# Abre Suspense desde la misma pantalla que verá el usuario.
+from resources.lib import explorar  # noqa: E402
+from unittest.mock import patch  # noqa: E402
+
+acciones_genero = inicio.accesos_generos("peliculas", url, "logo.png")
+comprobar("géneros: accesos directos a Suspense y a ocho géneros nuevos",
+          {"Suspense", "Aventura", "Drama", "Crimen", "Animación", "Fantasía",
+           "Romance", "Misterio", "Familiar"}.issubset({a["label"] for a in acciones_genero}))
+
+
+class ElementoVisual:
+    def __init__(self, etiqueta, label2=""):
+        self.etiqueta, self.propiedades = etiqueta, {}
+        self.tag = types.SimpleNamespace(setPlot=lambda plot: None, setResumePoint=lambda *args: None)
+
+    def setArt(self, arte): self.arte = arte
+    def setProperty(self, clave, valor): self.propiedades[clave] = valor
+    def getProperty(self, clave): return self.propiedades.get(clave, "")
+    def getVideoInfoTag(self): return self.tag
+
+
+class FilaVisual:
+    def __init__(self): self.reset()
+    def reset(self): self.items, self.pos = [], 0
+    def addItem(self, item): self.items.append(item)
+    def addItems(self, items): self.items.extend(items)
+    def size(self): return len(self.items)
+    def getListItem(self, i): return self.items[i]
+    def getSelectedItem(self): return self.items[self.pos] if self.items else None
+    def getSelectedPosition(self): return self.pos
+    def selectItem(self, i): self.pos = i
+
+
+paginas_genero = []
+abiertos_genero = []
+
+
+def resultados_genero(parametros, pagina):
+    paginas_genero.append((parametros["gid"], parametros.get("fuente"), pagina))
+    fichas = [{"id": i, "title": "Suspense %d" % i, "poster_path": "/p.jpg", "backdrop_path": "/f.jpg"}
+              for i in range(pagina * 20, pagina * 20 + 20)]
+    return explorar.Resultados(fichas, 2, False, {str(pagina * 20)}, {str(pagina * 20 + 1)})
+
+
+class VentanaInicioPrueba:
+    def __init__(self, *args):
+        self.filas = {i: FilaVisual() for i in [200, *inicio.TODAS]}
+        self.propiedades = {}
+
+    def getControl(self, i): return self.filas[i]
+    def setProperty(self, k, v): self.propiedades[k] = v
+    def clearProperty(self, k): self.propiedades.pop(k, None)
+    def setFocusId(self, i): self.foco = i
+
+    def doModal(self):
+        self.onInit()
+        self.filas[200].selectItem(3)
+        self.onClick(200)
+        indice = next(i for i, tarjeta in enumerate(self.filas[100].items) if tarjeta.etiqueta == "Suspense")
+        self.filas[100].selectItem(indice)
+        self.onClick(100)
+        primera = self.filas[103].items[0]
+        comprobar("explorador visual: abre Suspense con carátulas, fondo y estado en la misma ventana",
+                  self.propiedades["pestana"] == "Suspense" and self.foco == 103
+                  and primera.arte["poster"].endswith("/p.jpg") and primera.arte["fanart"].endswith("/f.jpg")
+                  and primera.getProperty("seguida") == "Con fuente"
+                  and len(self.filas[104].items) == 10 and not abiertos_genero)
+        self.onClick(103)
+        comprobar("explorador visual: abrir una carátula conserva el acceso a la ficha",
+                  "accion=explorar_ficha" in abiertos_genero[-1] and "id=20" in abiertos_genero[-1])
+        self.onAction(types.SimpleNamespace(getId=lambda: 6))
+        comprobar("explorador visual: la página siguiente conserva el género",
+                  paginas_genero[-1] == ("53", None, 2) and self.filas[103].items[0].etiqueta == "Suspense 40")
+        self.filas[100].selectItem(0)
+        self.onClick(100)
+        comprobar("explorador visual: cambiar filtros vuelve a la primera página",
+                  paginas_genero[-1] == ("53", "confirmadas", 1))
+        self.onAction(types.SimpleNamespace(getId=lambda: 92))
+        comprobar("explorador visual: Atrás devuelve el foco al género que se abrió",
+                  self.foco == 100 and self.filas[100].getSelectedItem().etiqueta == "Suspense")
+
+
+gui_generos = types.SimpleNamespace(WindowXML=VentanaInicioPrueba, ListItem=ElementoVisual,
+                                    Dialog=lambda: types.SimpleNamespace(select=lambda *args, **kw: 1))
+addon_generos = types.SimpleNamespace(getAddonInfo=lambda k: "", getSetting=lambda k: "")
+with patch.dict(sys.modules, {"xbmcgui": gui_generos,
+                              "xbmc": types.SimpleNamespace(executebuiltin=abiertos_genero.append)}):
+    inicio.abrir(addon_generos, PP, TPestanas(), url, cargar_exploracion=resultados_genero)
+
 print("\n%s" % ("TODO CORRECTO" if not fallos else "%d FALLOS" % fallos))
 sys.exit(1 if fallos else 0)
