@@ -137,8 +137,44 @@ def cartel(fid):
         </control>''' % {"id": fid, "c": c, "acento": ACENTO, "t2": TEXTO2}
 
 
+def fila_compacta(fid):
+    def pestana(enfocada):
+        foco = ('<control type="image"><left>5</left><width>228</width><height>52</height>'
+                '<texture colordiffuse="FF2764A3">pildora.png</texture>'
+                '<visible>Control.HasFocus(%d)</visible></control>' % fid) if enfocada else ""
+        return '''
+                    <control type="image"><left>5</left><width>228</width><height>52</height>
+                        <texture colordiffuse="FF242733">pildora.png</texture>
+                    </control>%(foco)s
+                    <control type="image"><left>19</left><top>47</top><width>200</width><height>3</height>
+                        <texture colordiffuse="%(acento)s">blanco.png</texture>
+                        <visible>String.IsEqual(ListItem.Property(activa),1)</visible>
+                    </control>
+                    <control type="label"><left>12</left><width>214</width><height>49</height>
+                        <align>center</align><aligny>center</aligny><font>font13</font><textcolor>FFFFFFFF</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                    </control>''' % {"foco": foco, "acento": ACENTO}
+
+    cabecera = '''
+            <control type="label">
+                <width>1520</width><height>35</height><font>font13</font><textcolor>FFB8BCC8</textcolor>
+                <label>$INFO[Window.Property(fila%d)]</label>
+                <visible>Integer.IsGreater(Container(%d).NumItems,0)</visible>
+            </control>''' % (fid, fid) if fid == 112 else ""
+    return cabecera + '''
+            <control type="list" id="%(id)d">
+                <width>1520</width><height>55</height><orientation>horizontal</orientation>
+                <onleft>%(menu)d</onleft>
+                <visible>Integer.IsGreater(Container(%(id)d).NumItems,0)</visible>
+                <itemlayout width="240" height="55">%(normal)s
+                </itemlayout>
+                <focusedlayout width="240" height="55">%(foco)s
+                </focusedlayout>
+            </control>''' % {"id": fid, "menu": MENU, "normal": pestana(False), "foco": pestana(True)}
+
+
 def xml():
-    filas = "".join(fila(fid, forma, None, None) for fid, forma in FILAS)
+    filas = fila_compacta(112) + fila_compacta(113) + "".join(fila(fid, forma, None, None) for fid, forma in FILAS)
     carteles = "".join(cartel(fid) for fid, _ in FILAS)
     return '''<?xml version="1.0" encoding="UTF-8"?>
 <!-- Pantalla de inicio de Palantix. Generada con tools/crear_inicio_xml.py: no editar a mano. -->

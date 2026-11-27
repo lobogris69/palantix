@@ -93,6 +93,8 @@ class Directorio:
         self.items = []
         self.contenido = ""
         self.correcto = True
+        self.orden = None
+        self.destino = None
 
     def __getattr__(self, nombre):
         return getattr(self.kodi, nombre)

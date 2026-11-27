@@ -336,7 +336,7 @@ abiertos_genero = []
 
 
 def resultados_genero(parametros, pagina):
-    paginas_genero.append((parametros["gid"], parametros.get("fuente"), pagina))
+    paginas_genero.append((parametros["gid"], parametros.get("fuente"), pagina, parametros.get("orden")))
     fichas = [{"id": i, "title": "Suspense %d" % i, "poster_path": "/p.jpg", "backdrop_path": "/f.jpg"}
               for i in range(pagina * 20, pagina * 20 + 20)]
     return explorar.Resultados(fichas, 2, False, {str(pagina * 20)}, {str(pagina * 20 + 1)})
@@ -370,11 +370,16 @@ class VentanaInicioPrueba:
                   "accion=explorar_ficha" in abiertos_genero[-1] and "id=20" in abiertos_genero[-1])
         self.onAction(types.SimpleNamespace(getId=lambda: 6))
         comprobar("explorador visual: la página siguiente conserva el género",
-                  paginas_genero[-1] == ("53", None, 2) and self.filas[103].items[0].etiqueta == "Suspense 40")
-        self.filas[100].selectItem(0)
-        self.onClick(100)
+                  paginas_genero[-1] == ("53", None, 2, None) and self.filas[103].items[0].etiqueta == "Suspense 40")
+        self.filas[inicio.FILA_ORDEN].selectItem(2)
+        self.onClick(inicio.FILA_ORDEN)
+        comprobar("explorador visual: la pestaña de año queda activa y vuelve a la primera página",
+                  paginas_genero[-1] == ("53", None, 1, "antiguo") and self.foco == inicio.FILA_ORDEN
+                  and self.filas[inicio.FILA_ORDEN].getSelectedItem().getProperty("activa") == "1")
+        self.filas[inicio.FILA_ACCIONES].selectItem(0)
+        self.onClick(inicio.FILA_ACCIONES)
         comprobar("explorador visual: cambiar filtros vuelve a la primera página",
-                  paginas_genero[-1] == ("53", "confirmadas", 1))
+                  paginas_genero[-1] == ("53", "confirmadas", 1, "antiguo"))
         self.onAction(types.SimpleNamespace(getId=lambda: 92))
         comprobar("explorador visual: Atrás devuelve el foco al género que se abrió",
                   self.foco == 100 and self.filas[100].getSelectedItem().etiqueta == "Suspense")
@@ -407,6 +412,20 @@ class VentanaSubmenus(VentanaInicioPrueba):
         self.onAction(types.SimpleNamespace(getId=lambda: 92))
         comprobar("submenús: Atrás vuelve a la serie seleccionada",
                   self.foco == 106 and self.filas[106].getSelectedItem().etiqueta == serie)
+        self.setFocusId(100)
+        self.filas[100].selectItem(0)
+        self.onClick(100)
+        orden = self.filas[inicio.FILA_ORDEN]
+        comprobar("búsqueda visual: el texto y las pestañas aparecen juntos",
+                  self.propiedades["pestana"] == "Mi serie" and orden.items[0].etiqueta == "Relevancia")
+        orden.selectItem(3)
+        self.onClick(inicio.FILA_ORDEN)
+        comprobar("búsqueda visual: cambiar por año mantiene el texto y cambia las carátulas",
+                  self.propiedades["pestana"] == "Mi serie" and self.filas[103].items[0].etiqueta == "antiguo"
+                  and orden.getSelectedItem().getProperty("activa") == "1")
+        self.onAction(types.SimpleNamespace(getId=lambda: 92))
+        comprobar("búsqueda visual: Atrás vuelve directamente al acceso Buscar series",
+                  self.foco == 100 and self.filas[100].getSelectedItem().etiqueta == "Buscar series")
 
 
 from resources.lib import menu_visual  # noqa: E402
@@ -419,6 +438,8 @@ def directorio_visual_prueba(destino):
         contenido, etiqueta, siguiente = "seasons", "Temporada 1", url(accion="capitulos", s=1, titulo=param["titulo"])
     elif accion == "capitulos":
         contenido, etiqueta, siguiente = "episodes", "1x01. Piloto", url(accion="reproducir", tipo="episodio", s=1, e=1)
+    elif accion == "s_buscar":
+        contenido, etiqueta, siguiente = "tvshows", param.get("orden", "origen"), url(accion="temporadas", id=1)
     else:
         return None
     item = ElementoVisual(etiqueta)
@@ -428,6 +449,9 @@ def directorio_visual_prueba(destino):
     item.tag.getPlayCount = item.tag.getResumeTime = item.tag.getResumeTimeTotal = lambda: 0
     directorio = menu_visual.Directorio(None)
     directorio.contenido = contenido
+    if accion == "s_buscar":
+        directorio.destino = url(accion=accion, q=param.get("q", "Mi serie"), orden=etiqueta)
+        directorio.orden = (explorar.ORDENES_BUSQUEDA, etiqueta, "", directorio.destino)
     directorio.items.append((siguiente, menu_visual.Elemento(item), contenido == "seasons"))
     return directorio
 

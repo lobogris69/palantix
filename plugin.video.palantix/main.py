@@ -572,14 +572,50 @@ def ficha_lista(it):
     return url(accion="reproducir_directo", u=it["url"]), li, False
 
 
+CATALOGOS_ORDENABLES = {"tendencias", "populares", "en_cines", "mejor_valoradas", "novedades_streaming",
+                        "s_tendencias", "s_populares", "s_mejor_valoradas", "s_capitulos_recientes",
+                        "anio", "s_anio", "genero", "s_genero", "saga"}
+
+
+def presentar_orden(accion, opciones, actual, alcance, extras):
+    if isinstance(xbmcplugin, menu_visual.Directorio):
+        xbmcplugin.orden = (opciones, actual, alcance, url(accion=accion, **extras))
+    else:
+        etiqueta = "Orden · " + opciones[actual] + (" · " + alcance if alcance else "")
+        carpeta(etiqueta, url(accion="orden_resultados", listado=accion, **extras), "DefaultAddonService.png")
+
+
+def menu_orden_resultados():
+    listado = PARAMS.get("listado")
+    extras = {k: v for k, v in PARAMS.items() if k not in ("accion", "listado")}
+    if listado not in CATALOGOS_ORDENABLES:
+        extras.pop("page", None)
+    opciones = (explorar.ORDENES_BUSQUEDA if listado in ("buscar", "s_buscar") else
+                explorar.ORDENES if listado == "explorar" else explorar.ORDENES_LISTADO)
+    actual = extras.pop("orden", next(iter(opciones)))
+    if listado in CATALOGOS_ORDENABLES or listado in ("buscar", "s_buscar", "explorar"):
+        for clave, etiqueta in opciones.items():
+            carpeta(("✓ " if clave == actual else "") + etiqueta, url(accion=listado, orden=clave, **extras))
+    return fin_listado()
+
+
 def listar(datos, accion, ficha=ficha_pelicula, contenido="movies", **extra):
     xbmcplugin.setContent(HANDLE, contenido)
     resultados = datos.get("results", [])
+    pagina, total = int(datos.get("page", 1)), int(datos.get("total_pages", 1))
+    if accion in CATALOGOS_ORDENABLES:
+        orden = PARAMS.get("orden")
+        orden = orden if orden in explorar.ORDENES_LISTADO else "origen"
+        resultados = explorar.ordenar(resultados, "movie" if contenido == "movies" else "tv", orden)
+        extra["orden"] = orden
     if contenido == "movies":
         resultados = peliculas_disponibles(resultados)
     items = [ficha(m) for m in resultados]
     xbmcplugin.addDirectoryItems(HANDLE, items, len(items))
-    pagina, total = int(datos.get("page", 1)), int(datos.get("total_pages", 1))
+    if accion in CATALOGOS_ORDENABLES:
+        presentar_orden(accion, explorar.ORDENES_LISTADO, orden, "Página actual", dict(extra, page=pagina))
+    if pagina > 1 and (accion in CATALOGOS_ORDENABLES or accion in ("buscar", "s_buscar")):
+        carpeta("Página anterior (%d)" % (pagina - 1), url(accion=accion, page=pagina - 1, **extra))
     if pagina < min(total, 500):  # TMDB no sirve más allá de la página 500
         carpeta("Página siguiente (%d) >>" % (pagina + 1), url(accion=accion, page=pagina + 1, **extra))
     fin_listado(contenido)
@@ -788,11 +824,12 @@ def explorar_catalogo(t, pagina):
     genero = PARAMS.get("genero") or "Todos los géneros"
     filtros = explorar.filtros(PARAMS)
     comunes = dict(tipo=tipo, gid=gid, genero=genero, **filtros)
-    valores = [opciones[filtros[clave]] for clave, _, opciones in explorar.campos_filtro(tipo)]
+    presentar_orden("explorar", explorar.ORDENES, filtros["orden"], "", comunes)
+    valores = [opciones[filtros[clave]] for clave, _, opciones in explorar.campos_filtro(tipo, incluir_orden=False)]
     carpeta("Filtros · " + " · ".join([genero] + valores),
             url(accion="explorar_filtros", **comunes), "DefaultAddonService.png")
-    if filtros != explorar.filtros({}):
-        carpeta("Quitar filtros", url(accion="explorar", tipo=tipo, gid=gid, genero=genero))
+    if filtros != explorar.filtros({"orden": filtros["orden"]}):
+        carpeta("Quitar filtros", url(accion="explorar", tipo=tipo, gid=gid, genero=genero, orden=filtros["orden"]))
     try:
         resultados = resultados_explorar(t, pagina, comunes)
     except (OSError, ValueError, sqlite3.Error):
@@ -807,6 +844,8 @@ def explorar_catalogo(t, pagina):
             li.setLabel(li.getLabel() + " · " + resultados.estado_de(tid))
         li.setProperty("IsPlayable", "false")
         xbmcplugin.addDirectoryItem(HANDLE, url(accion="explorar_ficha", tipo=tipo, id=tid), li, True)
+    if pagina > 1:
+        carpeta("Página anterior", url(accion="explorar", page=pagina - 1, **comunes))
     if pagina < resultados.total:
         carpeta("Página siguiente", url(accion="explorar", page=pagina + 1, **comunes))
     if not resultados.filas:
@@ -816,7 +855,7 @@ def explorar_catalogo(t, pagina):
 
 def explorar_filtros():
     tipo = "tv" if PARAMS.get("tipo") == "tv" else "movie"
-    filtros = explorar.elegir_filtros(tipo, PARAMS, xbmcgui.Dialog().select)
+    filtros = explorar.elegir_filtros(tipo, PARAMS, xbmcgui.Dialog().select, incluir_orden=False)
     if filtros is None:
         return fin_listado()
     destino = url(accion="explorar", tipo=tipo, gid=PARAMS.get("gid", ""),
@@ -869,7 +908,7 @@ def apuntar_busqueda(tipo, texto):
         json.dump(todas, f, ensure_ascii=False)
 
 
-def buscar(funcion, accion, pregunta, lista_fn):
+def buscar(t, accion, pregunta, lista_fn, tipo):
     texto = PARAMS.get("q")
     if not texto and not PARAMS.get("nueva"):
         anteriores = leer_busquedas().get(accion, []) if ADDON.getSetting("recordar_busquedas") != "false" else []
@@ -882,8 +921,19 @@ def buscar(funcion, accion, pregunta, lista_fn):
     if not texto:
         xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
         return
-    apuntar_busqueda(accion, texto)
-    lista_fn(varias_paginas(lambda n: funcion(texto, n), int(PARAMS.get("page", 1))), accion, q=texto)
+    pagina = max(1, int(PARAMS.get("page", 1)))
+    orden = PARAMS.get("orden")
+    orden = orden if orden in explorar.ORDENES_BUSQUEDA else "origen"
+    if pagina == 1 and orden == "origen":
+        apuntar_busqueda(accion, texto)
+    datos = explorar.buscar(t, CACHE, tipo, texto, pagina, paginas_por_pantalla(), orden)
+    alcance = "Primeros 100 resultados de TMDB" if datos["limite_busqueda"] else ""
+    if datos["guardados"]:
+        aviso("Mostrando los últimos resultados guardados")
+    if isinstance(xbmcplugin, menu_visual.Directorio):
+        xbmcplugin.destino = url(accion=accion, q=texto, orden=orden, page=pagina)
+    presentar_orden(accion, explorar.ORDENES_BUSQUEDA, orden, alcance, dict(q=texto, orden=orden))
+    lista_fn(datos, accion, q=texto, orden=orden)
 
 
 def anios(destino):
@@ -2422,6 +2472,7 @@ SIN_TMDB = {
     "lista_avisos_fuentes": lista_avisos_fuentes,
     "quitar_aviso_fuente": quitar_aviso_fuente,
     "explorar_filtros": explorar_filtros,
+    "orden_resultados": menu_orden_resultados,
     "favoritas_disponibles": favoritas_disponibles,
     "oferta_streaming": oferta_streaming,
     "trakt_progreso": trakt_progreso_series,
@@ -2490,9 +2541,9 @@ def con_tmdb(t, accion, page):
     elif accion == "s_genero":
         listar_series(vp(lambda n: t.s_por_genero(gid, n), page), "s_genero", gid=gid)
     elif accion == "buscar":
-        buscar(t.buscar, "buscar", "Buscar película", listar)
+        buscar(t, "buscar", "Buscar película", listar, "movie")
     elif accion == "s_buscar":
-        buscar(t.s_buscar, "s_buscar", "Buscar serie", listar_series)
+        buscar(t, "s_buscar", "Buscar serie", listar_series, "tv")
     elif accion == "temporadas":
         temporadas(t)
     elif accion == "capitulos":
