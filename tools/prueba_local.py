@@ -334,17 +334,25 @@ importlib.reload(cuadricula_real)
 class ControlGuia:
     def __init__(self, x, y, ancho, alto, etiqueta, **kwargs):
         self.x, self.y, self.ancho, self.etiqueta = x, y, ancho, etiqueta
+        self.cambios_navegacion = 0
 
     def getId(self): return id(self)
     def getX(self): return self.x
     def getWidth(self): return self.ancho
-    def setNavigation(self, *vecinos): self.vecinos = vecinos
+    def setNavigation(self, *vecinos):
+        self.vecinos = vecinos
+        self.cambios_navegacion += 1
+    def setLabel(self, etiqueta): self.etiqueta = etiqueta
+    def setPosition(self, x, y): self.x, self.y = x, y
+    def setVisible(self, visible): self.visible = visible
 
 
 class VentanaGuia:
     def __init__(self, *args): self.renderizados = []
     def addControl(self, control): self.renderizados.append(control)
-    def removeControls(self, controles): self.renderizados = []
+    def removeControls(self, controles):
+        for control in controles:
+            self.renderizados.remove(control)
     def setFocus(self, control): self.foco_actual = control
     def close(self): pass
 
@@ -356,11 +364,22 @@ class VentanaGuia:
                   and "https://ejemplo.invalid/logo.png" in etiquetas)
         comprobar("guía compacta: abre con el foco en la primera fila, tras una cabecera corta",
                   self.foco_actual.y == cuadricula_real.INICIO_FILAS and self.foco_actual.vecinos)
+        saliente = self.filas["1"]
+        compartida = self.filas["6"]
+        medio = compartida.navegables[0][1]
+        controles_anteriores = set(self.renderizados)
+        navegacion_anterior = medio.cambios_navegacion
+        y_anterior = medio.y
         ultimo = next(c for c in self.renderizados if c.etiqueta == "Canal 11")
         self.onFocus(ultimo.getId())
         self.onFocus(ultimo.vecinos[1].getId())
         comprobar("guía: la flecha abajo al final desplaza una fila y mantiene el foco en los canales",
                   self.pagina == 1 and self.foco_actual.etiqueta == "Canal 12")
+        comprobar("guía: bajar mueve las filas compartidas y solo cambia los controles del canal del borde",
+                  medio.y == y_anterior - cuadricula_real.ALTO_FILA and compartida is self.filas["6"]
+                  and medio.cambios_navegacion == navegacion_anterior and self.contador.etiqueta == "2–12 de 12 canales"
+                  and controles_anteriores - set(self.renderizados) == {c for c, _, _ in saliente.controles}
+                  and set(self.renderizados) - controles_anteriores == {c for c, _, _ in self.filas["12"].controles})
         ultimo = self.foco_actual
         self.onFocus(ultimo.vecinos[1].getId())
         comprobar("guía: el límite inferior mantiene visible y seleccionado el último canal",
@@ -370,6 +389,8 @@ class VentanaGuia:
         self.onFocus(primero.vecinos[0].getId())
         comprobar("guía: la flecha arriba al inicio recupera la fila anterior",
                   self.pagina == 0 and self.foco_actual.etiqueta == "Canal 1")
+        comprobar("guía: subir conserva los controles y devuelve la fila a su posición",
+                  compartida is self.filas["6"] and medio.y == y_anterior)
         self.onAction(types.SimpleNamespace(getId=lambda: 105))
         comprobar("guía: la rueda del ratón desplaza los canales",
                   self.pagina == 1 and self.foco_actual.etiqueta == "Canal 12")
@@ -378,6 +399,12 @@ class VentanaGuia:
         comprobar("guía compacta: el avance de página lleva a los canales restantes",
                   "Canal 12" in [c.etiqueta for c in self.renderizados]
                   and "Canal 1" not in [c.etiqueta for c in self.renderizados])
+        cabecera = self.botones[:]
+        anterior = self.filas["6"]
+        self.onClick(cabecera[1].getId())
+        comprobar("guía: al cambiar de horario se renuevan los programas y se mantiene la cabecera",
+                  self.filas["6"] is not anterior and self.botones == cabecera and self.foco_actual is cabecera[1]
+                  and not self.marca_cabecera.visible)
 
         opcion = next(c for c in self.renderizados if c.etiqueta == "Grupos")
         REGISTRO["select"] = 1
