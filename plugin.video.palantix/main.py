@@ -1016,7 +1016,7 @@ def seguir_viendo(t):
             li = xbmcgui.ListItem("%s  %s" % (cabecera, marca_serie(sid)))
             li.setProperty("IsPlayable", "true")
             destino = url(accion="reproducir", tipo="episodio", s=sig["s"], e=sig["e"],
-                          poster=d.get("poster", ""), fondo=d.get("fanart", ""), **comun)
+                          capitulo=sig["nombre"], poster=d.get("poster", ""), fondo=d.get("fanart", ""), **comun)
             es_carpeta = False
             texto = "[B]Siguiente:[/B] %dx%02d · %s\n[B]Emitido:[/B] %s\n[B]Te quedan:[/B] %d capítulo%s\n\n%s" % (
                 sig["s"], sig["e"], sig["nombre"], fecha_es(sig.get("emitido")), n.get("pendientes", 0),
@@ -1205,7 +1205,8 @@ def trakt_progreso_series():
         li.setArt({"icon": "DefaultTVShows.png"})
         comun = {"id": tmdb, "titulo": titulo, "anio": serie.get("year") or ""}
         if tmdb and pendientes and temporada is not None and capitulo is not None:
-            destino = url(accion="reproducir", tipo="episodio", s=temporada, e=capitulo, elegir=1, **comun)
+            destino = url(accion="reproducir", tipo="episodio", s=temporada, e=capitulo,
+                          capitulo=prox.get("title") or "", elegir=1, **comun)
             li.setProperty("IsPlayable", "true")
             li.addContextMenuItems([("Ver temporadas", "Container.Update(%s)" % url(accion="temporadas", **comun))])
             xbmcplugin.addDirectoryItem(HANDLE, destino, li, False)
@@ -1320,7 +1321,7 @@ def capitulos(t):
         li.setProperty("IsPlayable", "true")
         destino = url(accion="reproducir", tipo="episodio", id=PARAMS["id"], titulo=serie,
                       original=PARAMS.get("original", ""), anio=PARAMS.get("anio", ""), s=n_s, e=n_e,
-                      poster=PARAMS.get("poster", ""), fondo=PARAMS.get("fondo", ""))
+                      capitulo=ep.get("name") or "", poster=PARAMS.get("poster", ""), fondo=PARAMS.get("fondo", ""))
         acciones = [("Elegir fuente", "PlayMedia(%s&elegir=1)" % destino)]
         if emitido and emitido <= hoy:
             cambio = "Marcar como no visto" if visto else "Marcar como visto"
@@ -2262,6 +2263,40 @@ def elegir_fuentes(ordenadas, titulo, automatico):
         yield fuente, analisis, not restantes
 
 
+def identificar_capitulo(peli, previo):
+    sid = str(peli.tmdb_id)
+    seg = mis_series().get(sid) or {}
+    vistos = trakt.Trakt(AJ, log=log, timeout=5).historial_episodios(CACHE).get(sid)
+    visto = seguimiento.esta_visto(seguimiento.con_historial_trakt(seg, vistos), peli.temporada, peli.episodio)
+    estado = "Visto" if visto else "A medias" if previo else "Pendiente"
+    nombre = ""
+    if visto or ADDON.getSetting("series_sin_destripes") != "true":
+        nombre = PARAMS.get("capitulo") or ""
+        if not nombre and peli.tmdb_id:
+            t = api(obligatoria=False)
+            if t:
+                try:
+                    datos = t.temporada(peli.tmdb_id, peli.temporada)
+                    nombre = next((e.get("name") or "" for e in datos.get("episodes", [])
+                                   if e["episode_number"] == peli.episodio), "")
+                except (OSError, ValueError):
+                    pass
+    return nombre, estado
+
+
+def confirmar_capitulo(identidad, titulo, estado, previo):
+    detalle = " · ".join(filter(None, (titulo, estado)))
+    primera = "Volver a ver" if estado == "Visto" else "Reproducir desde el principio"
+    opciones = [xbmcgui.ListItem(primera, detalle)]
+    if previo:
+        opciones = [xbmcgui.ListItem("Reanudar desde %s" % progreso.hhmmss(previo["pos"]), detalle),
+                    xbmcgui.ListItem("Desde el principio", detalle)]
+    n = xbmcgui.Dialog().select(identidad, opciones, useDetails=True)
+    if n < 0:
+        return None
+    return previo["pos"] if previo and n == 0 else 0
+
+
 def reproducir():
     episodio = PARAMS.get("tipo") == "episodio"
     peli = Peli(
@@ -2273,13 +2308,19 @@ def reproducir():
         temporada=int(PARAMS.get("s", 0)),
         episodio=int(PARAMS.get("e", 0)),
     )
-    nombre = "%s %dx%02d" % (peli.titulo, peli.temporada, peli.episodio) if episodio else peli.titulo
+    identidad = "%dx%02d · %s" % (peli.temporada, peli.episodio, peli.titulo) if episodio else peli.titulo
     desde = 0
     previo = progreso.de(PERFIL, {"tipo": peli.tipo, "tmdb": peli.tmdb_id, "s": peli.temporada, "e": peli.episodio})
+    titulo_capitulo, estado = identificar_capitulo(peli, previo) if episodio else ("", "")
+    nombre = " · ".join(filter(None, (identidad, titulo_capitulo)))
     if PARAMS.get("reintentar"):
         offset = PARAMS.get("desde", "0")
         desde = min(int(offset), 86400) if offset.isascii() and offset.isdecimal() and len(offset) <= 5 else 0
-    elif previo and PARAMS.get("continuar"):
+    elif episodio and not PARAMS.get("desde_cero") and (previo or not PARAMS.get("siguiente_auto")):
+        desde = confirmar_capitulo(identidad, titulo_capitulo, estado, previo)
+        if desde is None:
+            return no_reproducir()
+    elif previo and PARAMS.get("continuar") and not PARAMS.get("desde_cero"):
         desde = previo["pos"]
     elif previo and not PARAMS.get("desde_cero"):
         n = xbmcgui.Dialog().contextmenu(["Reanudar desde %s" % progreso.hhmmss(previo["pos"]), "Desde el principio"])
@@ -2325,7 +2366,11 @@ def reproducir():
         return no_reproducir()
 
     automatico = ADDON.getSetting("autoplay") == "true" and not PARAMS.get("elegir")
-    titulo_selector = "Elige fuente · " + ORDENES_FUENTES[pref["calidad_primero"]]
+    if episodio:
+        punto = "Desde %s" % progreso.hhmmss(desde) if desde else "Desde el principio" if previo else ""
+        titulo_selector = " · ".join(filter(None, (identidad, estado, punto, "Elige fuente")))
+    else:
+        titulo_selector = "Elige fuente · " + ORDENES_FUENTES[pref["calidad_primero"]]
     if fallos:
         aviso("Búsqueda incompleta: " + ", ".join(sorted(set(fallos))))
     for f, a, ultima in elegir_fuentes(ordenadas, titulo_selector, automatico):
@@ -2349,9 +2394,19 @@ def reproducir():
         if not f.privada:
             log("Reproduciendo %s" % f.url)
         prioridad_audio = pref["prioridad_idiomas"] or (pref["idioma"],)
-        li = xbmcgui.ListItem(path=ruta)
-        if desde:
-            li.setProperty("StartOffset", str(int(desde)))
+        li = xbmcgui.ListItem(label=nombre, path=ruta)
+        tag = li.getVideoInfoTag()
+        if episodio:
+            tag.setMediaType("episode")
+            tag.setTvShowTitle(peli.titulo)
+            tag.setTitle(titulo_capitulo or "%dx%02d" % (peli.temporada, peli.episodio))
+            tag.setSeason(peli.temporada)
+            tag.setEpisode(peli.episodio)
+            tag.setPlaycount(int(estado == "Visto"))
+        # Kodi copia el marcador del vídeo resuelto; no copia su propiedad StartOffset.
+        total = previo["total"] if previo else 0
+        if total or desde:
+            tag.setResumePoint(float(desde), float(max(total, desde + 1)))
         sub = poner_subtitulos(peli, a, pref, subs_serie)
         if sub:
             li.setSubtitles([sub])
@@ -2360,7 +2415,7 @@ def reproducir():
         if len(ordenadas) > 1 and len(intentos) <= 12:
             reintento = url(accion="reproducir", tipo=peli.tipo, id=peli.tmdb_id, s=peli.temporada,
                             e=peli.episodio, titulo=peli.titulo, original=peli.titulo_original,
-                            anio=peli.anio, elegir=1, desde=int(desde), reintentar=",".join(intentos),
+                            anio=peli.anio, capitulo=titulo_capitulo, elegir=1, desde=int(desde), reintentar=",".join(intentos),
                             poster=PARAMS.get("poster", ""), fondo=PARAMS.get("fondo", ""))
         avisar_al_servicio(peli, prioridad_audio, reintento)
         return xbmcplugin.setResolvedUrl(HANDLE, True, li)
@@ -2412,6 +2467,7 @@ def avisar_al_servicio(peli, prioridad_audio=(), reintento=""):
     if sig:
         destino = url(accion="reproducir", tipo="episodio", id=peli.tmdb_id, titulo=peli.titulo,
                       original=peli.titulo_original, anio=peli.anio or "", s=sig["temporada"], e=sig["episodio"],
+                      capitulo=sig["nombre"], siguiente_auto=1,
                       poster=PARAMS.get("poster", ""), fondo=PARAMS.get("fondo", ""))
         ventana.setProperty("palantix.siguiente", json.dumps({
             "url": destino, "etiqueta": "%s %dx%02d. %s" % (peli.titulo, sig["temporada"], sig["episodio"], sig["nombre"])}))
