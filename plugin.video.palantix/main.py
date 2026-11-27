@@ -753,76 +753,67 @@ def explorar_generos(t):
     return fin_listado()
 
 
+def resultados_explorar(t, pagina, parametros):
+    tipo = "tv" if parametros.get("tipo") == "tv" else "movie"
+    gid = parametros.get("gid", "")
+    filtros = explorar.filtros(parametros)
+    if tipo == "tv" and filtros["estado"] == "seguimiento":
+        datos = explorar.seguidas(t, CACHE, mis_series(), gid, filtros["orden"], pagina)
+        guardados = False
+    else:
+        datos, guardados = explorar.cargar(t, CACHE, tipo, explorar.consulta(tipo, gid, filtros, pagina))
+
+    filas = datos.get("results", [])
+    confirmadas, pendientes = set(), set()
+    if tipo == "movie":
+        _, proveedores = consulta_fuentes(None)
+        disponibles, _ = disponibilidad.filtrar(filas, CACHE, (proveedores, preferencias()),
+                                                 ids_pendientes=pendientes)
+        confirmadas = {str(f["id"]) for f in disponibles}
+        if filtros["fuente"] == "confirmadas":
+            filas = disponibles
+        elif filtros["fuente"] == "pendientes":
+            filas = [f for f in filas if str(f["id"]) in pendientes and str(f["id"]) not in confirmadas]
+    return explorar.Resultados(filas, min(datos.get("total_pages", 1), 500), guardados, confirmadas, pendientes)
+
+
 def explorar_catalogo(t, pagina):
     tipo = "tv" if PARAMS.get("tipo") == "tv" else "movie"
     gid = PARAMS.get("gid", "")
     genero = PARAMS.get("genero") or "Todos los géneros"
     filtros = explorar.filtros(PARAMS)
     comunes = dict(tipo=tipo, gid=gid, genero=genero, **filtros)
-    campos = [("orden", "Orden", explorar.ORDENES)]
-    if tipo == "movie":
-        campos += [("duracion", "Duración", explorar.DURACIONES), ("fuente", "Disponibilidad", explorar.FUENTES)]
-    else:
-        campos.append(("estado", "Estado", explorar.ESTADOS))
-    valores = [opciones[filtros[clave]] for clave, _, opciones in campos]
+    valores = [opciones[filtros[clave]] for clave, _, opciones in explorar.campos_filtro(tipo)]
     carpeta("Filtros · " + " · ".join([genero] + valores),
             url(accion="explorar_filtros", **comunes), "DefaultAddonService.png")
     if filtros != explorar.filtros({}):
         carpeta("Quitar filtros", url(accion="explorar", tipo=tipo, gid=gid, genero=genero))
-
     try:
-        if tipo == "tv" and filtros["estado"] == "seguimiento":
-            datos = explorar.seguidas(t, CACHE, mis_series(), gid, filtros["orden"], pagina)
-            guardados = False
-        else:
-            datos, guardados = explorar.cargar(t, CACHE, tipo, explorar.consulta(tipo, gid, filtros, pagina))
+        resultados = resultados_explorar(t, pagina, comunes)
     except (OSError, ValueError, sqlite3.Error):
         aviso("No se pudo cargar este género")
         return fin_listado()
-    if guardados:
+    if resultados.guardados:
         aviso("Mostrando los últimos resultados guardados")
-    filas = datos.get("results", [])
-    confirmadas, pendientes = set(), set()
-    if tipo == "movie":
-        _, proveedores = consulta_fuentes(None)
-        resultados, _ = disponibilidad.filtrar(filas, CACHE, (proveedores, preferencias()),
-                                               ids_pendientes=pendientes)
-        confirmadas = {str(f["id"]) for f in resultados}
-        if filtros["fuente"] == "confirmadas":
-            filas = resultados
-        elif filtros["fuente"] == "pendientes":
-            filas = [f for f in filas if str(f["id"]) in pendientes and str(f["id"]) not in confirmadas]
-    for ficha in filas:
+    for ficha in resultados.filas:
         _, li, _ = ficha_serie(ficha) if tipo == "tv" else ficha_pelicula(ficha)
         tid = str(ficha["id"])
         if tipo == "movie":
-            estado = ("Con fuente confirmada" if tid in confirmadas else
-                      "Por comprobar" if tid in pendientes else "Sin fuente confirmada")
-            li.setLabel(li.getLabel() + " · " + estado)
+            li.setLabel(li.getLabel() + " · " + resultados.estado_de(tid))
         li.setProperty("IsPlayable", "false")
         xbmcplugin.addDirectoryItem(HANDLE, url(accion="explorar_ficha", tipo=tipo, id=tid), li, True)
-    if pagina < min(datos.get("total_pages", 1), 500):
+    if pagina < resultados.total:
         carpeta("Página siguiente", url(accion="explorar", page=pagina + 1, **comunes))
-    if not filas:
+    if not resultados.filas:
         aviso("No hay resultados con estos filtros en esta página")
-    return fin_listado()
+    return fin_listado("tvshows" if tipo == "tv" else "movies")
 
 
 def explorar_filtros():
     tipo = "tv" if PARAMS.get("tipo") == "tv" else "movie"
-    campos = [("orden", "Orden", explorar.ORDENES)]
-    if tipo == "movie":
-        campos += [("duracion", "Duración", explorar.DURACIONES), ("fuente", "Disponibilidad", explorar.FUENTES)]
-    else:
-        campos.append(("estado", "Estado", explorar.ESTADOS))
-    filtros = explorar.filtros(PARAMS)
-    dialogo = xbmcgui.Dialog()
-    for clave, titulo, opciones in campos:
-        claves = list(opciones)
-        n = dialogo.select(titulo, list(opciones.values()), preselect=claves.index(filtros[clave]))
-        if n < 0:
-            return fin_listado()
-        filtros[clave] = claves[n]
+    filtros = explorar.elegir_filtros(tipo, PARAMS, xbmcgui.Dialog().select)
+    if filtros is None:
+        return fin_listado()
     destino = url(accion="explorar", tipo=tipo, gid=PARAMS.get("gid", ""),
                   genero=PARAMS.get("genero", ""), **filtros)
     xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
@@ -2533,7 +2524,8 @@ def abrir_inicio():
         tk = False
     try:
         inicio.abrir(ADDON, PERFIL, t, url, favoritas=leer_favoritas(), con_trakt=tk, log=log,
-                     filtrar_peliculas=peliculas_disponibles)
+                     filtrar_peliculas=peliculas_disponibles,
+                     cargar_exploracion=lambda parametros, pagina: resultados_explorar(t, pagina, parametros))
     except Exception as e:  # si la pantalla nueva fallase en alguna tele, que no te quedes sin Palantix
         log("Inicio falló, abro el menú clásico: %s" % e)
         xbmc.executebuiltin("Container.Update(%s)" % url(accion="clasico"))

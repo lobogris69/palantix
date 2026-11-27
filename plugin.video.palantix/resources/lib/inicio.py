@@ -7,8 +7,9 @@ import json
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import parse_qsl
 
-from . import avisos_fuentes, novedades, progreso, seguimiento
+from . import avisos_fuentes, explorar, novedades, progreso, seguimiento
 from .tmdb import TMDB
 from .explorar import GEN_DESTACADOS
 from .providers.cine_libre import TITULO as TITULO_CINE_LIBRE
@@ -187,12 +188,28 @@ def titulos(pestana):
 
 def accesos_generos(pestana, url, logo):
     tipo = "tv" if pestana == "series" else "movie"
-    opciones = [{"label": titulo, "label2": titulo, "thumb": logo, "tipo": "carpeta",
+    opciones = [{"label": titulo, "label2": titulo, "thumb": logo, "tipo": "genero",
                  "url": url(accion="explorar", tipo=tipo, gid=gid, genero=titulo)}
                 for gid, titulo in GEN_DESTACADOS[tipo]]
     opciones.append({"label": "Todos los géneros", "label2": "Todos los géneros", "thumb": logo,
                      "tipo": "carpeta", "url": url(accion="explorar_generos", tipo=tipo)})
     return opciones
+
+
+def tarjetas_exploracion(resultados, tipo, url, seguidas, nov):
+    tarjetas = []
+    for ficha in resultados.filas:
+        if tipo == "tv":
+            tarjeta = elemento_serie(ficha, url, seguidas, nov)
+        else:
+            tarjeta = elemento_pelicula(ficha, url)
+            tarjeta["info"] = _info(tarjeta["info"], resultados.estado_de(ficha["id"]))
+            if str(ficha["id"]) in resultados.confirmadas:
+                tarjeta["seguida"] = "Con fuente"
+        tarjeta.update(tipo="carpeta", url=url(accion="explorar_ficha", tipo=tipo, id=ficha["id"]),
+                       thumb=tarjeta["thumb"] or tarjeta["poster"], exploracion=True)
+        tarjetas.append(tarjeta)
+    return tarjetas
 
 
 def datos_filas(perfil, t, url, favoritas=(), filtrar_peliculas=lambda pelis: pelis,
@@ -289,7 +306,7 @@ def menu(url, con_trakt=False, con_radio=True):
 
 
 def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
-          filtrar_peliculas=lambda pelis: pelis):
+          filtrar_peliculas=lambda pelis: pelis, cargar_exploracion=None):
     import xbmc
     import xbmcgui
 
@@ -298,7 +315,7 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
     def li(e):
         item = xbmcgui.ListItem(e["label"], e.get("label2", ""))
         fanart = "" if addon.getSetting("modo_visual") == "2" else e.get("fanart", "")
-        sustituto = logo if e.get("a_medias") else ""
+        sustituto = logo if e.get("a_medias") or e.get("exploracion") else ""
         item.setArt({"poster": e.get("poster") or sustituto, "fanart": fanart,
                      "thumb": e.get("thumb") or sustituto, "icon": e.get("icon", "")})
         tag = item.getVideoInfoTag()
@@ -332,6 +349,7 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
         def cargar(self, pestana):
             """Rellena las filas con la pestaña pedida (Inicio, Películas o Series) sin salir de la pantalla."""
             self.pestana = pestana
+            self.exploracion = None
             self.setProperty("pestana", NOMBRE_PESTANA[pestana])
             menu_lateral = self.getControl(200)
             for i in range(menu_lateral.size()):
@@ -357,33 +375,108 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
             self.clearProperty("estado")
             if pestana != "inicio" and t:
                 filas[100] = accesos_generos(pestana, url, logo)
-            for fid in TODAS:
-                self.getControl(fid).reset()
-                self.clearProperty("fila%d" % fid)
-            primera = None
             nombres = titulos(pestana)
             if pestana == "inicio" and addon.getSetting("inicio_primero_nuevos") == "true":
                 filas[101], filas[102] = filas.get(102, []), filas.get(101, [])
                 nombres[101], nombres[102] = nombres[102], nombres[101]
-            for fid, titulo in sorted(nombres.items()):
+            estado = "No hay títulos para mostrar" if t else "Pon tu clave de TMDB en Ajustes para ver el catálogo"
+            self.pintar_filas(filas, nombres, estado)
+
+        def pintar_filas(self, filas, nombres, estado="", foco=None):
+            primera = None
+            for fid in TODAS:
+                control = self.getControl(fid)
+                control.reset()
+                self.clearProperty("fila%d" % fid)
                 elementos = filas.get(fid, [])
                 if elementos:
-                    self.setProperty("fila%d" % fid, titulo)
-                    self.getControl(fid).addItems([li(e) for e in elementos])
+                    self.setProperty("fila%d" % fid, nombres[fid])
+                    control.addItems([li(e) for e in elementos])
                     primera = primera or fid
-            if primera:
-                self.setFocusId(primera)
+            if estado and not primera:
+                self.setProperty("estado", estado)
             else:
-                self.setProperty("estado", "No hay títulos para mostrar" if t else
-                                 "Pon tu clave de TMDB en Ajustes para ver el catálogo")
-                self.setFocusId(200)
+                self.clearProperty("estado")
+            self.setFocusId(foco or primera or 200)
+
+        def abrir_genero(self, parametros):
+            self.acceso_genero = self.getControl(100).getSelectedPosition()
+            self.exploracion = parametros
+            self.pagina_genero(1)
+
+        def pagina_genero(self, pagina):
+            parametros = self.exploracion
+            tipo = parametros.get("tipo", "movie")
+            self.setProperty("pestana", parametros.get("genero") or "Géneros")
+            estado = ""
+            try:
+                resultados = cargar_exploracion(parametros, pagina)
+            except Exception as e:
+                log("Explorar géneros: %s" % e)
+                resultados = explorar.Resultados([], pagina, False, set(), set())
+                estado = "No se pudo cargar este género"
+            self.pagina_actual = pagina
+            self.total_genero = resultados.total
+            filtros = explorar.filtros(parametros)
+            valores = [opciones[filtros[clave]] for clave, _, opciones in explorar.campos_filtro(tipo)]
+            acciones = [("Filtros", "filtros_genero", _info(*valores))]
+            if filtros != explorar.filtros({}):
+                acciones.append(("Quitar filtros", "limpiar_genero", ""))
+            if pagina > 1:
+                acciones.append(("Página anterior", "anterior_genero", ""))
+            if pagina < resultados.total:
+                acciones.append(("Página siguiente", "siguiente_genero", ""))
+            acciones.append(("Volver a géneros", "volver_genero", ""))
+            filas = {100: [{"label": titulo, "label2": titulo, "thumb": logo, "tipo": accion, "info": info}
+                           for titulo, accion, info in acciones]}
+            nombres = {100: "Explorar"}
+            tarjetas = tarjetas_exploracion(resultados, tipo, url, seguimiento.leer(perfil), novedades.leer(perfil))
+            for i in range(0, len(tarjetas), 10):
+                fid = 103 + i // 10
+                filas[fid] = tarjetas[i:i + 10]
+                nombres[fid] = ("Resultados · página %d" % pagina) if i == 0 else "Más resultados"
+            if resultados.guardados:
+                estado = "Mostrando los últimos resultados guardados"
+            elif not tarjetas and not estado:
+                estado = "No hay resultados con estos filtros"
+            if estado:
+                nombres[100] = estado
+            self.pintar_filas(filas, nombres, foco=103 if tarjetas else 100)
+
+        def elegir_genero(self, tipo):
+            try:
+                generos = t.s_generos() if tipo == "tv" else t.generos()
+            except (OSError, ValueError):
+                return xbmcgui.Dialog().ok("Géneros", "No se pudo cargar la lista de géneros")
+            opciones = [{"name": "Todos los géneros", "id": ""}] + sorted(generos, key=lambda g: g["name"].casefold())
+            n = xbmcgui.Dialog().select("Géneros", [g["name"] for g in opciones])
+            if n >= 0:
+                elegido = opciones[n]
+                self.abrir_genero({"tipo": tipo, "gid": elegido["id"], "genero": elegido["name"]})
+
+        def volver_genero(self):
+            self.cargar(self.pestana)
+            self.getControl(100).selectItem(self.acceso_genero)
+            self.setFocusId(100)
+
+        def cambiar_filtros_genero(self):
+            filtros = explorar.elegir_filtros(self.exploracion["tipo"], self.exploracion, xbmcgui.Dialog().select)
+            if filtros is not None:
+                self.exploracion.update(filtros)
+                self.pagina_genero(1)
 
         def onAction(self, accion):
-            # Atrás: desde Películas o Series vuelve al Inicio; desde el Inicio, cierra Palantix
-            if accion.getId() in (10, 92):
+            codigo = accion.getId()
+            if codigo in (10, 92):
+                if self.exploracion:
+                    return self.volver_genero()
                 if getattr(self, "pestana", "inicio") != "inicio":
                     return self.cargar("inicio")
                 return self.close()
+            if self.exploracion and codigo in (5, 6):
+                pagina = self.pagina_actual + (1 if codigo == 6 else -1)
+                if 1 <= pagina <= self.total_genero:
+                    self.pagina_genero(pagina)
 
         def onClick(self, control_id):
             item = self.getControl(control_id).getSelectedItem()
@@ -392,6 +485,23 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
             tipo, destino = item.getProperty("tipo"), item.getProperty("url")
             if tipo == "pestana":
                 self.cargar(destino)
+            elif tipo in ("genero", "generos") and cargar_exploracion:
+                parametros = dict(parse_qsl(destino.partition("?")[2]))
+                if tipo == "genero":
+                    self.abrir_genero(parametros)
+                else:
+                    self.elegir_genero(parametros.get("tipo", "movie"))
+            elif tipo == "filtros_genero":
+                self.cambiar_filtros_genero()
+            elif tipo == "limpiar_genero":
+                self.exploracion.update(explorar.filtros({}))
+                self.pagina_genero(1)
+            elif tipo == "anterior_genero":
+                self.pagina_genero(self.pagina_actual - 1)
+            elif tipo == "siguiente_genero":
+                self.pagina_genero(self.pagina_actual + 1)
+            elif tipo == "volver_genero":
+                self.volver_genero()
             elif tipo == "salir":  # cerrar Palantix y volver a la pantalla principal de Kodi
                 self.close()
                 xbmc.executebuiltin("ActivateWindow(Home)")
