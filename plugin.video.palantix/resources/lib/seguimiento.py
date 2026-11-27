@@ -6,6 +6,7 @@ El servicio lo rellena (gancho Seguimiento) y main.py lo enseña en «Seguir vie
 import json
 import os
 import time
+from tempfile import NamedTemporaryFile
 
 from . import ganchos
 
@@ -31,10 +32,24 @@ def leer(perfil):
         return {}
 
 
+def revision_archivo(perfil):
+    try:
+        return os.stat(_ruta(perfil)).st_mtime_ns
+    except OSError:
+        return 0
+
+
 def guardar(perfil, datos):
     os.makedirs(perfil, exist_ok=True)
-    with open(_ruta(perfil), "w", encoding="utf-8") as f:
-        json.dump(datos, f, ensure_ascii=False)
+    temporal = None
+    try:
+        with NamedTemporaryFile(dir=perfil, mode="w", encoding="utf-8", delete=False) as f:
+            temporal = f.name
+            json.dump(datos, f, ensure_ascii=False)
+        os.replace(temporal, _ruta(perfil))
+    finally:
+        if temporal and os.path.exists(temporal):
+            os.unlink(temporal)
 
 
 def clave_capitulo(s, e):
@@ -96,7 +111,7 @@ def ordenadas(perfil):
 
 @ganchos.registrar
 class Seguimiento:
-    """Gancho del servicio: mide cuánto se ha visto y apunta el capítulo al terminar."""
+    """Guarda el capítulo al alcanzar el umbral o al terminar la reproducción."""
 
     def __init__(self, perfil=None):
         if perfil is None:
@@ -104,11 +119,11 @@ class Seguimiento:
             import xbmcvfs
             perfil = xbmcvfs.translatePath(xbmcaddon.Addon().getAddonInfo("profile"))
         self.perfil = perfil
-        self.visto = 0.0
+        self.guardado = False
         self.umbral = VISTO
 
     def al_empezar(self, meta, reproductor):
-        self.visto = 0.0
+        self.guardado = False
         try:
             import xbmcaddon
             self.umbral = umbral_visto(xbmcaddon.Addon().getSetting)
@@ -116,9 +131,10 @@ class Seguimiento:
             self.umbral = VISTO
 
     def al_avanzar(self, meta, reproductor, actual, total):
-        if total > 0:
-            self.visto = max(self.visto, actual / total)
+        if not self.guardado and meta.get("tipo") == "episodio" and total > 0 and actual / total >= self.umbral:
+            marcar_visto(self.perfil, meta)
+            self.guardado = True
 
     def al_parar(self, meta, reproductor, terminado):
-        if terminado or self.visto >= self.umbral:
+        if terminado and not self.guardado:
             marcar_visto(self.perfil, meta)

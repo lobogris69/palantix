@@ -426,6 +426,18 @@ class VentanaSubmenus(VentanaInicioPrueba):
         self.onAction(types.SimpleNamespace(getId=lambda: 92))
         comprobar("búsqueda visual: Atrás vuelve directamente al acceso Buscar series",
                   self.foco == 100 and self.filas[100].getSelectedItem().etiqueta == "Buscar series")
+        menu_lateral = self.filas[200]
+        mis_series = next(i for i, item in enumerate(menu_lateral.items) if item.etiqueta == "Mis series")
+        menu_lateral.selectItem(mis_series)
+        self.setFocusId(200)
+        self.onClick(200)
+        comprobar("seguimiento visual: inicialmente muestra la recomendación del 1x02",
+                  self.filas[101].getSelectedItem().etiqueta == "1x02")
+        sg.marcar_visto(PP, {"tipo": "episodio", "tmdb": 4242, "s": 1, "e": 3})
+        self.onInit()
+        comprobar("seguimiento visual: al volver del vídeo actualiza el episodio y conserva el foco",
+                  self.foco == 101 and self.filas[101].getSelectedItem().etiqueta == "1x04")
+        sg.quitar(PP, 4242)
 
 
 from resources.lib import menu_visual  # noqa: E402
@@ -440,6 +452,9 @@ def directorio_visual_prueba(destino):
         contenido, etiqueta, siguiente = "episodes", "1x01. Piloto", url(accion="reproducir", tipo="episodio", s=1, e=1)
     elif accion == "s_buscar":
         contenido, etiqueta, siguiente = "tvshows", param.get("orden", "origen"), url(accion="temporadas", id=1)
+    elif accion == "seguir":
+        episodio = 4 if "4242" in sg.leer(PP) else 2
+        contenido, etiqueta, siguiente = "episodes", "1x%02d" % episodio, url(accion="reproducir", e=episodio)
     else:
         return None
     item = ElementoVisual(etiqueta)

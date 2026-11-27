@@ -740,6 +740,7 @@ PROPIEDADES.pop("palantix.ultimo_error", None)
 
 # ---------------------------------------------------------------- seguimiento de series
 from resources.lib import seguimiento as sg  # noqa: E402
+sg.quitar(TMP, 100)  # la simulación del final del 1x01 ya cruzó el umbral del servicio
 g = sg.Seguimiento(TMP)
 m1 = {"tipo": "episodio", "tmdb": 100, "s": 1, "e": 1, "titulo": "Ficción", "original": "Fiction", "anio": 2020,
       "poster": "/p.jpg", "fanart": "/f.jpg"}
@@ -748,6 +749,8 @@ g.al_avanzar(m1, None, 600, 3000)
 g.al_parar(m1, None, False)
 comprobar("seguimiento: parar al 20 % no cuenta como visto", "100" not in sg.leer(TMP))
 g.al_avanzar(m1, None, 2700, 3000)
+comprobar("seguimiento: al superar el umbral queda guardado antes de volver al menú",
+          sg.leer(TMP).get("100", {}).get("e") == 1)
 g.al_parar(m1, None, False)
 comprobar("seguimiento: al 90 % el capítulo cuenta como visto", sg.leer(TMP).get("100", {}).get("e") == 1)
 r = abrir("?accion=seguir")
@@ -806,6 +809,31 @@ nv._guardar(TMP, datos)
 recien = nv.refrescar(TMP, _tm.TMDB("x"))
 comprobar("aviso de capítulo nuevo al refrescar", recien == [("Ficción", {"s": 1, "e": 2, "emitido": "2020-01-08"})])
 sg.quitar(TMP, 100)
+
+# Si hay un episodio anterior sin registrar, el siguiente debe continuar desde el último visto.
+abrir("?accion=seguir&estado=todos")
+serie_con_cuatro = dict(TMDB_FALSO["/tv/100"], last_episode_to_air={
+    "season_number": 1, "episode_number": 4, "air_date": "2020-01-22"})
+temporada_con_cuatro = {"episodes": TMDB_FALSO["/tv/100/season/1"]["episodes"][:2] + [
+    {"season_number": 1, "episode_number": 3, "name": "Tres", "air_date": "2020-01-15"},
+    {"season_number": 1, "episode_number": 4, "name": "Cuatro", "air_date": "2020-01-22"}]}
+with patch.dict(TMDB_FALSO, {"/tv/100": serie_con_cuatro, "/tv/100/season/1": temporada_con_cuatro}):
+    sg.marcar_visto(TMP, m1)
+    abrir("?accion=seguir&estado=todos")
+    sg.marcar_visto(TMP, dict(m1, e=3))
+    comprobar("seguimiento: el cambio invalida la recomendación guardada",
+              nv.progreso_desactualizado(TMP))
+    r = abrir("?accion=seguir&estado=todos")
+    est = nv.leer(TMP)["100"]
+    comprobar("Mis series: tras ver el 1x03 recomienda 1x04 y conserva el 1x02 pendiente",
+              "1x04. Cuatro" in r["items"][3][0] and "e=4" in r["items"][3][1]
+              and est["episodios_pendientes"] == [[1, 2], [1, 4]])
+    sg.marcar_visto(TMP, dict(m1, e=4))
+    r = abrir("?accion=seguir&estado=todos")
+    comprobar("Mis series: si solo queda un hueco, lo identifica como pendiente anterior",
+              "1x02. Dos · Pendiente anterior" in r["items"][3][0])
+sg.quitar(TMP, 100)
+abrir("?accion=seguir&estado=todos")
 
 # ---------------------------------------------------------------- películas a medias
 from resources.lib import progreso as pg  # noqa: E402
