@@ -9,7 +9,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qsl
 
-from . import avisos_fuentes, explorar, novedades, progreso, seguimiento
+from . import avisos_fuentes, explorar, menu_visual, novedades, progreso, seguimiento
 from .tmdb import TMDB
 from .explorar import GEN_DESTACADOS
 from .providers.cine_libre import TITULO as TITULO_CINE_LIBRE
@@ -306,7 +306,7 @@ def menu(url, con_trakt=False, con_radio=True):
 
 
 def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
-          filtrar_peliculas=lambda pelis: pelis, cargar_exploracion=None):
+          filtrar_peliculas=lambda pelis: pelis, cargar_exploracion=None, cargar_directorio=None):
     import xbmc
     import xbmcgui
 
@@ -324,6 +324,8 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
             tag.setResumePoint(float(e["resume"][0]), float(e["resume"][1]))
         for k in ("info", "destacado", "nuevo", "seguida", "a_medias", "tipo", "url"):
             item.setProperty(k, e.get(k, ""))
+        if e.get("contexto"):
+            item.setProperty("contexto", json.dumps(e["contexto"]))
         return item
 
     class Inicio(xbmcgui.WindowXML):
@@ -349,7 +351,8 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
         def cargar(self, pestana):
             """Rellena las filas con la pestaña pedida (Inicio, Películas o Series) sin salir de la pantalla."""
             self.pestana = pestana
-            self.exploracion = None
+            self.exploracion = self.directorio = None
+            self.niveles = []
             self.setProperty("pestana", NOMBRE_PESTANA[pestana])
             menu_lateral = self.getControl(200)
             for i in range(menu_lateral.size()):
@@ -465,15 +468,112 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
                 self.exploracion.update(filtros)
                 self.pagina_genero(1)
 
+        def posicion(self):
+            fid = self.getFocusId()
+            if fid not in TODAS and fid != 200:
+                return 200, 0
+            return fid, self.getControl(fid).getSelectedPosition()
+
+        def restaurar_foco(self, posicion):
+            fid, indice = posicion
+            control = self.getControl(fid)
+            if control.size():
+                control.selectItem(max(0, min(indice, control.size() - 1)))
+                self.setFocusId(fid)
+
+        def abrir_directorio(self, destino, etiqueta):
+            if cargar_directorio is None:
+                return False
+            directorio = cargar_directorio(destino)
+            if directorio is None:
+                return False
+            if directorio.correcto:
+                self.niveles.append((self.directorio, self.posicion()))
+                self.directorio = (destino, menu_visual.titulo_de(menu_visual.parametros(destino), etiqueta), directorio)
+                self.pintar_directorio()
+            return True
+
+        def pintar_directorio(self):
+            _, titulo, directorio = self.directorio
+            filas, nombres = menu_visual.filas(directorio, logo)
+            self.setProperty("pestana", titulo)
+            self.pintar_filas(filas, nombres, "No hay elementos en este apartado", foco=103 if 103 in filas else None)
+
+        def volver_directorio(self):
+            self.directorio, posicion = self.niveles.pop()
+            if self.directorio:
+                self.pintar_directorio()
+            elif self.exploracion:
+                self.pagina_genero(self.pagina_actual)
+            else:
+                self.cargar(self.pestana)
+            self.restaurar_foco(posicion)
+
+        def contexto(self):
+            fid = self.getFocusId()
+            if fid not in TODAS:
+                return
+            item = self.getControl(fid).getSelectedItem()
+            opciones = json.loads(item.getProperty("contexto") or "[]") if item else []
+            if not opciones:
+                return
+            n = xbmcgui.Dialog().select("Opciones", [etiqueta for etiqueta, _ in opciones])
+            if n < 0:
+                return
+            etiqueta, comando = opciones[n]
+            if comando.startswith("Container.Update("):
+                destino = comando[len("Container.Update("):-1].partition(",")[0]
+                if self.abrir_directorio(destino, etiqueta):
+                    return
+            if comando.startswith("RunPlugin(") and self.ejecutar_mutacion(comando[10:-1]):
+                return
+            xbmc.executebuiltin(comando)
+
+        def ejecutar_mutacion(self, destino):
+            if not self.directorio or not menu_visual.es_mutacion(destino):
+                return False
+            resultado = cargar_directorio(destino, mutacion=True)
+            if resultado is None:
+                return False
+            if resultado.correcto:
+                self.refrescar_directorio()
+            return True
+
+        def refrescar_directorio(self):
+            destino, titulo, _ = self.directorio
+            posicion = self.posicion()
+            directorio = cargar_directorio(destino)
+            if directorio is not None and directorio.correcto:
+                self.directorio = (destino, titulo, directorio)
+                self.pintar_directorio()
+                self.restaurar_foco(posicion)
+
+        def filtrar_directorio(self, destino):
+            datos = menu_visual.parametros(destino)
+            tipo = datos.get("tipo", "movie")
+            filtros = explorar.elegir_filtros(tipo, datos, xbmcgui.Dialog().select)
+            if filtros is None:
+                return
+            titulo = datos.get("genero") or "Todos los géneros"
+            destino = url(accion="explorar", tipo=tipo, gid=datos.get("gid", ""), genero=titulo, **filtros)
+            directorio = cargar_directorio(destino)
+            if directorio is not None and directorio.correcto:
+                self.directorio = (destino, titulo, directorio)
+                self.pintar_directorio()
+
         def onAction(self, accion):
             codigo = accion.getId()
             if codigo in (10, 92):
+                if self.directorio:
+                    return self.volver_directorio()
                 if self.exploracion:
                     return self.volver_genero()
                 if getattr(self, "pestana", "inicio") != "inicio":
                     return self.cargar("inicio")
                 return self.close()
-            if self.exploracion and codigo in (5, 6):
+            if codigo == 117:
+                return self.contexto()
+            if self.exploracion and not self.directorio and codigo in (5, 6):
                 pagina = self.pagina_actual + (1 if codigo == 6 else -1)
                 if 1 <= pagina <= self.total_genero:
                     self.pagina_genero(pagina)
@@ -507,10 +607,19 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
                 xbmc.executebuiltin("ActivateWindow(Home)")
             elif tipo == "ajustes":
                 addon.openSettings()
-            elif tipo in ("reproducir", "dialogo") or "accion=actualizar" in destino:
-                xbmc.executebuiltin("PlayMedia(%s)" % destino if tipo == "reproducir" else "RunPlugin(%s)" % destino)
+            elif tipo == "reproducir":
+                xbmc.executebuiltin("PlayMedia(%s)" % destino)
             elif destino:
-                xbmc.executebuiltin("ActivateWindow(Videos,%s,return)" % destino)
+                accion = menu_visual.parametros(destino).get("accion")
+                if self.directorio and accion == "explorar_filtros":
+                    self.filtrar_directorio(destino)
+                elif self.ejecutar_mutacion(destino):
+                    return
+                elif tipo == "dialogo" or accion in menu_visual.DIALOGOS:
+                    xbmc.executebuiltin("RunPlugin(%s)" % destino)
+                elif (not cargar_directorio or accion not in menu_visual.TITULOS
+                      or not self.abrir_directorio(destino, item.getLabel())):
+                    xbmc.executebuiltin("ActivateWindow(Videos,%s,return)" % destino)
 
     ventana = Inicio("palantix-inicio.xml", addon.getAddonInfo("path"), "default", "1080i")
     ventana.doModal()
