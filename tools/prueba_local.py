@@ -519,14 +519,20 @@ r = abrir("?accion=anio&a=2001")
 comprobar("listado de un año con página siguiente", r["items"][0][0] == "Peli A (2001)" and "Página siguiente (2)" in r["items"][-1][0])
 AJUSTES["paginas"] = "2"  # 60 por pantalla = 3 páginas de TMDB
 r = abrir("?accion=anio&a=2001")
-comprobar("60 por pantalla junta 3 páginas y no ofrece más (TMDB tiene 3)", len(r["items"]) == 3)
+comprobar("60 por pantalla junta 3 páginas y no ofrece más (TMDB tiene 3)",
+          len(r["items"]) == 4 and r["items"][-1][0].startswith("Orden · "))
 AJUSTES["paginas"] = "0"
 r = abrir("?accion=sagas")
 comprobar("menú de sagas con buscador y sagas conocidas", r["items"][0][0].startswith("[B]Buscar") and len(r["items"]) > 10)
 r = abrir("?accion=sagas_buscar&q=Saga")
 comprobar("buscar saga", r["items"] == [("Saga X", r["items"][0][1])] and "accion=saga" in r["items"][0][1])
 r = abrir("?accion=saga&id=10")
-comprobar("saga en orden de estreno", [i[0] for i in r["items"]] == ["Parte 1 (2001)", "Parte 2 (2005)"])
+comprobar("saga en orden de estreno", [i[0] for i in r["items"]][:2] == ["Parte 1 (2001)", "Parte 2 (2005)"])
+r = abrir("?accion=saga&id=10&orden=nuevo")
+comprobar("saga permite invertir el orden de estreno", [i[0] for i in r["items"]][:2] == ["Parte 2 (2005)", "Parte 1 (2001)"])
+r = abrir("?accion=orden_resultados&listado=anio&a=2001&orden=titulo&page=2")
+comprobar("menú clásico de ordenación conserva la página actual y el año",
+          any(t == "✓ Título A–Z" and "page=2" in u and "a=2001" in u for t, u in r["items"]))
 r = abrir("?accion=s_buscar&q=Ficci%C3%B3n")
 r = abrir("?accion=s_buscar")
 comprobar("búsquedas recientes recordadas", [i[0] for i in r["items"]][:2] == ["[B]Nueva búsqueda...[/B]", "Ficción"])
@@ -923,7 +929,7 @@ with tempfile.TemporaryDirectory() as cache:
                   indice.filtrar([otro], cache, (config[0], {"idioma": "LAT"})) == ([], True))
 
 def probar_menu_visual(addon, perfil, t, url, cargar_directorio, **kwargs):
-    from resources.lib import menu_visual
+    from resources.lib import explorar, menu_visual
 
     # runpy sustituye argv[0]; en Kodi es la URL base del complemento.
     url.__globals__["BASE"] = "plugin://plugin.video.palantix/"
@@ -952,6 +958,22 @@ def probar_menu_visual(addon, perfil, t, url, cargar_directorio, **kwargs):
               and cargar_directorio(url(accion="tv_internacional")).correcto)
     comprobar("submenús: los destinos ajenos quedan fuera de la captura",
               cargar_directorio("plugin://script.module.horus/") is None)
+    t.s_buscar = lambda texto, page: {"total_pages": 6, "results": [
+        {"id": 500 + page, "name": "Otra %d" % page, "first_air_date": "200%d-01-01" % page}]}
+    consulta = url(accion="s_buscar", q="Otra", orden="nuevo")
+    resultados = cargar_directorio(consulta)
+    filas, _ = menu_visual.filas(resultados, "/logo.png")
+    comprobar("búsqueda ordenada: año compara las primeras páginas y avisa del alcance",
+              resultados.correcto and resultados.orden[1:3] == ("nuevo", "Primeros 100 resultados de TMDB")
+              and filas[103][0]["label"] == "Otra 5 (2005)")
+    resultados = cargar_directorio(url(accion="s_buscar", q="Otra", orden="antiguo"))
+    filas, _ = menu_visual.filas(resultados, "/logo.png")
+    comprobar("búsqueda ordenada: cambiar dirección conserva el texto y ordena los mismos resultados",
+              resultados.correcto and menu_visual.parametros(resultados.destino)["q"] == "Otra"
+              and filas[103][0]["label"] == "Otra 1 (2001)")
+    comprobar("género ordenado: usa orden de TMDB antes de paginar en series y películas",
+              explorar.consulta("tv", "80", explorar.filtros({"orden": "antiguo"}), 2)["sort_by"] == "first_air_date.asc"
+              and explorar.consulta("movie", "53", explorar.filtros({"orden": "titulo"}), 1)["sort_by"] == "title.asc")
 
 
 REGISTRO["builtin"] = []

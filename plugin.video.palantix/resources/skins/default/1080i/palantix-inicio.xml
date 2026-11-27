@@ -475,6 +475,73 @@
             <scrolltime tween="cubic" easing="out">320</scrolltime>
             <onleft>200</onleft>
             
+            <control type="label">
+                <width>1520</width><height>35</height><font>font13</font><textcolor>FFB8BCC8</textcolor>
+                <label>$INFO[Window.Property(fila112)]</label>
+                <visible>Integer.IsGreater(Container(112).NumItems,0)</visible>
+            </control>
+            <control type="list" id="112">
+                <width>1520</width><height>55</height><orientation>horizontal</orientation>
+                <onleft>200</onleft>
+                <visible>Integer.IsGreater(Container(112).NumItems,0)</visible>
+                <itemlayout width="240" height="55">
+                    <control type="image"><left>5</left><width>228</width><height>52</height>
+                        <texture colordiffuse="FF242733">pildora.png</texture>
+                    </control>
+                    <control type="image"><left>19</left><top>47</top><width>200</width><height>3</height>
+                        <texture colordiffuse="FF14A9FF">blanco.png</texture>
+                        <visible>String.IsEqual(ListItem.Property(activa),1)</visible>
+                    </control>
+                    <control type="label"><left>12</left><width>214</width><height>49</height>
+                        <align>center</align><aligny>center</aligny><font>font13</font><textcolor>FFFFFFFF</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                    </control>
+                </itemlayout>
+                <focusedlayout width="240" height="55">
+                    <control type="image"><left>5</left><width>228</width><height>52</height>
+                        <texture colordiffuse="FF242733">pildora.png</texture>
+                    </control><control type="image"><left>5</left><width>228</width><height>52</height><texture colordiffuse="FF2764A3">pildora.png</texture><visible>Control.HasFocus(112)</visible></control>
+                    <control type="image"><left>19</left><top>47</top><width>200</width><height>3</height>
+                        <texture colordiffuse="FF14A9FF">blanco.png</texture>
+                        <visible>String.IsEqual(ListItem.Property(activa),1)</visible>
+                    </control>
+                    <control type="label"><left>12</left><width>214</width><height>49</height>
+                        <align>center</align><aligny>center</aligny><font>font13</font><textcolor>FFFFFFFF</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                    </control>
+                </focusedlayout>
+            </control>
+            <control type="list" id="113">
+                <width>1520</width><height>55</height><orientation>horizontal</orientation>
+                <onleft>200</onleft>
+                <visible>Integer.IsGreater(Container(113).NumItems,0)</visible>
+                <itemlayout width="240" height="55">
+                    <control type="image"><left>5</left><width>228</width><height>52</height>
+                        <texture colordiffuse="FF242733">pildora.png</texture>
+                    </control>
+                    <control type="image"><left>19</left><top>47</top><width>200</width><height>3</height>
+                        <texture colordiffuse="FF14A9FF">blanco.png</texture>
+                        <visible>String.IsEqual(ListItem.Property(activa),1)</visible>
+                    </control>
+                    <control type="label"><left>12</left><width>214</width><height>49</height>
+                        <align>center</align><aligny>center</aligny><font>font13</font><textcolor>FFFFFFFF</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                    </control>
+                </itemlayout>
+                <focusedlayout width="240" height="55">
+                    <control type="image"><left>5</left><width>228</width><height>52</height>
+                        <texture colordiffuse="FF242733">pildora.png</texture>
+                    </control><control type="image"><left>5</left><width>228</width><height>52</height><texture colordiffuse="FF2764A3">pildora.png</texture><visible>Control.HasFocus(113)</visible></control>
+                    <control type="image"><left>19</left><top>47</top><width>200</width><height>3</height>
+                        <texture colordiffuse="FF14A9FF">blanco.png</texture>
+                        <visible>String.IsEqual(ListItem.Property(activa),1)</visible>
+                    </control>
+                    <control type="label"><left>12</left><width>214</width><height>49</height>
+                        <align>center</align><aligny>center</aligny><font>font13</font><textcolor>FFFFFFFF</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                    </control>
+                </focusedlayout>
+            </control>
             <control type="label" id="600">
                 <width>1600</width><height>54</height><font>font27</font><textcolor>FFFFFFFF</textcolor>
                 <label>[B]$INFO[Window.Property(fila100)][/B]</label>

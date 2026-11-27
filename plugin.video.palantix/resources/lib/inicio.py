@@ -25,7 +25,8 @@ FILAS = [
     (109, "Avisos listos para ver"),
     (111, "Capítulos recientes"),
 ]
-TODAS = list(range(100, 112))  # ids de las filas del XML (101-102 anchas, 103-111 carátulas)
+FILA_ORDEN, FILA_ACCIONES = 112, 113
+TODAS = [FILA_ORDEN, FILA_ACCIONES, *range(100, 112)]
 
 # Pestañas: (fila, título, (qué pedir a TMDB, argumento))
 PESTANAS = {
@@ -193,7 +194,15 @@ def accesos_generos(pestana, url, logo):
                 for gid, titulo in GEN_DESTACADOS[tipo]]
     opciones.append({"label": "Todos los géneros", "label2": "Todos los géneros", "thumb": logo,
                      "tipo": "carpeta", "url": url(accion="explorar_generos", tipo=tipo)})
+    etiqueta = "Buscar series" if tipo == "tv" else "Buscar películas"
+    opciones.insert(0, {"label": etiqueta, "label2": etiqueta, "thumb": logo, "tipo": "carpeta",
+                        "url": url(accion="s_buscar" if tipo == "tv" else "buscar")})
     return opciones
+
+
+def pestanas_orden(opciones, orden, tipo, destino):
+    return [{"label": etiqueta, "tipo": tipo, "url": destino(clave), "activa": "1" if clave == orden else ""}
+            for clave, etiqueta in opciones.items()]
 
 
 def tarjetas_exploracion(resultados, tipo, url, seguidas, nov):
@@ -322,7 +331,7 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
         tag.setPlot(e.get("plot", ""))
         if e.get("resume"):
             tag.setResumePoint(float(e["resume"][0]), float(e["resume"][1]))
-        for k in ("info", "destacado", "nuevo", "seguida", "a_medias", "tipo", "url"):
+        for k in ("info", "destacado", "nuevo", "seguida", "a_medias", "tipo", "url", "activa"):
             item.setProperty(k, e.get(k, ""))
         if e.get("contexto"):
             item.setProperty("contexto", json.dumps(e["contexto"]))
@@ -421,18 +430,20 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
             self.pagina_actual = pagina
             self.total_genero = resultados.total
             filtros = explorar.filtros(parametros)
-            valores = [opciones[filtros[clave]] for clave, _, opciones in explorar.campos_filtro(tipo)]
+            valores = [opciones[filtros[clave]] for clave, _, opciones in
+                       explorar.campos_filtro(tipo, incluir_orden=False)]
             acciones = [("Filtros", "filtros_genero", _info(*valores))]
-            if filtros != explorar.filtros({}):
+            if filtros != explorar.filtros({"orden": filtros["orden"]}):
                 acciones.append(("Quitar filtros", "limpiar_genero", ""))
             if pagina > 1:
                 acciones.append(("Página anterior", "anterior_genero", ""))
             if pagina < resultados.total:
                 acciones.append(("Página siguiente", "siguiente_genero", ""))
             acciones.append(("Volver a géneros", "volver_genero", ""))
-            filas = {100: [{"label": titulo, "label2": titulo, "thumb": logo, "tipo": accion, "info": info}
-                           for titulo, accion, info in acciones]}
-            nombres = {100: "Explorar"}
+            filas = {FILA_ACCIONES: [{"label": titulo, "tipo": accion, "info": info}
+                                    for titulo, accion, info in acciones],
+                     FILA_ORDEN: pestanas_orden(explorar.ORDENES, filtros["orden"], "orden_genero", str)}
+            nombres = {FILA_ORDEN: "Orden", FILA_ACCIONES: "Explorar"}
             tarjetas = tarjetas_exploracion(resultados, tipo, url, seguimiento.leer(perfil), novedades.leer(perfil))
             for i in range(0, len(tarjetas), 10):
                 fid = 103 + i // 10
@@ -443,8 +454,15 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
             elif not tarjetas and not estado:
                 estado = "No hay resultados con estos filtros"
             if estado:
-                nombres[100] = estado
-            self.pintar_filas(filas, nombres, foco=103 if tarjetas else 100)
+                nombres[FILA_ORDEN] += " · " + estado
+            self.pintar_filas(filas, nombres, foco=103 if tarjetas else FILA_ORDEN)
+
+        def ordenar_genero(self, orden):
+            if orden == explorar.filtros(self.exploracion)["orden"]:
+                return
+            self.exploracion["orden"] = orden
+            self.pagina_genero(1)
+            self.restaurar_foco((FILA_ORDEN, list(explorar.ORDENES).index(orden)))
 
         def elegir_genero(self, tipo):
             try:
@@ -463,7 +481,8 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
             self.setFocusId(100)
 
         def cambiar_filtros_genero(self):
-            filtros = explorar.elegir_filtros(self.exploracion["tipo"], self.exploracion, xbmcgui.Dialog().select)
+            filtros = explorar.elegir_filtros(self.exploracion["tipo"], self.exploracion, xbmcgui.Dialog().select,
+                                             incluir_orden=False)
             if filtros is not None:
                 self.exploracion.update(filtros)
                 self.pagina_genero(1)
@@ -489,13 +508,27 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
                 return False
             if directorio.correcto:
                 self.niveles.append((self.directorio, self.posicion()))
-                self.directorio = (destino, menu_visual.titulo_de(menu_visual.parametros(destino), etiqueta), directorio)
+                destino = directorio.destino or destino
+                datos = menu_visual.parametros(destino)
+                titulo = datos.get("q") if datos.get("accion") in ("buscar", "s_buscar") else ""
+                self.directorio = (destino, titulo or menu_visual.titulo_de(datos, etiqueta), directorio)
                 self.pintar_directorio()
             return True
 
         def pintar_directorio(self):
             _, titulo, directorio = self.directorio
             filas, nombres = menu_visual.filas(directorio, logo)
+            if directorio.orden:
+                opciones, actual, alcance, base = directorio.orden
+                parametros = menu_visual.parametros(base)
+                parametros.pop("orden", None)
+                filas[FILA_ORDEN] = pestanas_orden(opciones, actual, "orden_directorio",
+                                                  lambda orden: url(orden=orden, **parametros))
+                nombres[FILA_ORDEN] = "Orden" + (" · " + alcance if alcance else "")
+                if 100 in filas:
+                    filas[FILA_ACCIONES], nombres[FILA_ACCIONES] = filas.pop(100), nombres.pop(100)
+                if 103 not in filas:
+                    nombres[FILA_ORDEN] += " · Sin resultados"
             self.setProperty("pestana", titulo)
             self.pintar_filas(filas, nombres, "No hay elementos en este apartado", foco=103 if 103 in filas else None)
 
@@ -542,24 +575,33 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
         def refrescar_directorio(self):
             destino, titulo, _ = self.directorio
             posicion = self.posicion()
-            directorio = cargar_directorio(destino)
-            if directorio is not None and directorio.correcto:
-                self.directorio = (destino, titulo, directorio)
-                self.pintar_directorio()
+            if self.reemplazar_directorio(destino, titulo):
                 self.restaurar_foco(posicion)
+
+        def reemplazar_directorio(self, destino, titulo):
+            directorio = cargar_directorio(destino)
+            if directorio is None or not directorio.correcto:
+                return False
+            self.directorio = (directorio.destino or destino, titulo, directorio)
+            self.pintar_directorio()
+            return True
 
         def filtrar_directorio(self, destino):
             datos = menu_visual.parametros(destino)
             tipo = datos.get("tipo", "movie")
-            filtros = explorar.elegir_filtros(tipo, datos, xbmcgui.Dialog().select)
+            filtros = explorar.elegir_filtros(tipo, datos, xbmcgui.Dialog().select, incluir_orden=False)
             if filtros is None:
                 return
             titulo = datos.get("genero") or "Todos los géneros"
             destino = url(accion="explorar", tipo=tipo, gid=datos.get("gid", ""), genero=titulo, **filtros)
-            directorio = cargar_directorio(destino)
-            if directorio is not None and directorio.correcto:
-                self.directorio = (destino, titulo, directorio)
-                self.pintar_directorio()
+            self.reemplazar_directorio(destino, titulo)
+
+        def ordenar_directorio(self, destino):
+            _, titulo, directorio = self.directorio
+            orden = menu_visual.parametros(destino)["orden"]
+            opciones, actual, _, _ = directorio.orden
+            if orden != actual and self.reemplazar_directorio(destino, titulo):
+                self.restaurar_foco((FILA_ORDEN, list(opciones).index(orden)))
 
         def onAction(self, accion):
             codigo = accion.getId()
@@ -593,8 +635,14 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
                     self.elegir_genero(parametros.get("tipo", "movie"))
             elif tipo == "filtros_genero":
                 self.cambiar_filtros_genero()
+            elif tipo == "orden_genero":
+                self.ordenar_genero(destino)
+            elif tipo == "orden_directorio":
+                self.ordenar_directorio(destino)
             elif tipo == "limpiar_genero":
-                self.exploracion.update(explorar.filtros({}))
+                defaults = explorar.filtros({})
+                for k, _, _ in explorar.campos_filtro(self.exploracion["tipo"], incluir_orden=False):
+                    self.exploracion[k] = defaults[k]
                 self.pagina_genero(1)
             elif tipo == "anterior_genero":
                 self.pagina_genero(self.pagina_actual - 1)
@@ -613,6 +661,8 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
                 accion = menu_visual.parametros(destino).get("accion")
                 if self.directorio and accion == "explorar_filtros":
                     self.filtrar_directorio(destino)
+                elif self.directorio and control_id == FILA_ACCIONES and menu_visual.parametros(destino).get("page"):
+                    self.reemplazar_directorio(destino, self.directorio[1])
                 elif self.ejecutar_mutacion(destino):
                     return
                 elif tipo == "dialogo" or accion in menu_visual.DIALOGOS:
