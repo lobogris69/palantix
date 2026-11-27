@@ -253,11 +253,12 @@ def datos_filas(perfil, t, url, favoritas=(), filtrar_peliculas=lambda pelis: pe
         sig = n.get("siguiente")
         if not sig:
             continue
+        anterior = " · Pendiente anterior" if sig.get("pendiente_anterior") else ""
         e = {"label": d["titulo"], "label2": "%s · %dx%02d" % (d["titulo"], sig["s"], sig["e"]),
              "poster": _img(d.get("poster")), "fanart": _img(d.get("fanart"), "w1280"),
              "thumb": _img(sig.get("still"), "w780") or _img(d.get("fanart"), "w780"),
              "plot": "[B]%dx%02d · %s[/B][CR]%s" % (sig["s"], sig["e"], sig["nombre"], sig.get("sinopsis", "")),
-             "info": _info("Serie", "%d capítulo%s pendiente%s" % (n["pendientes"], "" if n["pendientes"] == 1 else "s",
+             "info": _info("Serie" + anterior, "%d capítulo%s pendiente%s" % (n["pendientes"], "" if n["pendientes"] == 1 else "s",
                                                                  "" if n["pendientes"] == 1 else "s")),
              "destacado": "● NUEVO CAPÍTULO" if n.get("nuevo") else "",
              "nuevo": "1" if n.get("nuevo") else "", "tipo": "reproducir",
@@ -316,7 +317,8 @@ def menu(url, con_trakt=False, con_radio=True):
 
 
 def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
-          filtrar_peliculas=lambda pelis: pelis, cargar_exploracion=None, cargar_directorio=None):
+          filtrar_peliculas=lambda pelis: pelis, cargar_exploracion=None, cargar_directorio=None,
+          refrescar_seguimiento=None):
     import xbmc
     import xbmcgui
 
@@ -345,6 +347,7 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
             self.setProperty("version", addon.getAddonInfo("version"))
             self.setProperty("fondo_palantix", addon.getAddonInfo("fanart"))
             if getattr(self, "_listo", False):
+                self.actualizar_progreso()
                 return
             self._listo = True
             for fid, titulo in FILAS:
@@ -370,7 +373,10 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
                 activa = opcion.getProperty("tipo") == "pestana" and opcion.getProperty("url") == pestana
                 opcion.setProperty("activa", "1" if activa else "")
             self.setProperty("estado", "Cargando...")
+            self.revision_seguimiento = seguimiento.revision_archivo(perfil)
             try:
+                if refrescar_seguimiento and pestana in ("inicio", "series") and novedades.progreso_desactualizado(perfil):
+                    refrescar_seguimiento()
                 if pestana == "inicio":
                     mostrar_catalogo = addon.getSetting("inicio_mostrar_catalogo") != "false"
                     filas = datos_filas(perfil, t, url, favoritas, filtrar_peliculas,
@@ -504,10 +510,12 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
         def abrir_directorio(self, destino, etiqueta):
             if cargar_directorio is None:
                 return False
+            revision = seguimiento.revision_archivo(perfil)
             directorio = cargar_directorio(destino)
             if directorio is None:
                 return False
             if directorio.correcto:
+                self.revision_seguimiento = revision
                 self.niveles.append((self.directorio, self.posicion()))
                 destino = directorio.destino or destino
                 datos = menu_visual.parametros(destino)
@@ -536,7 +544,9 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
         def volver_directorio(self):
             self.directorio, posicion = self.niveles.pop()
             if self.directorio:
-                self.pintar_directorio()
+                destino, titulo, _ = self.directorio
+                if not self.es_directorio_seguimiento() or not self.reemplazar_directorio(destino, titulo):
+                    self.pintar_directorio()
             elif self.exploracion:
                 self.pagina_genero(self.pagina_actual)
             else:
@@ -580,12 +590,33 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
                 self.restaurar_foco(posicion)
 
         def reemplazar_directorio(self, destino, titulo):
+            revision = seguimiento.revision_archivo(perfil)
             directorio = cargar_directorio(destino)
             if directorio is None or not directorio.correcto:
                 return False
             self.directorio = (directorio.destino or destino, titulo, directorio)
+            self.revision_seguimiento = revision
             self.pintar_directorio()
             return True
+
+        def es_directorio_seguimiento(self):
+            return bool(self.directorio and menu_visual.parametros(self.directorio[0]).get("accion")
+                        in ("seguir", "capitulos", "trakt_progreso"))
+
+        def actualizar_progreso(self):
+            revision = seguimiento.revision_archivo(perfil)
+            if revision == self.revision_seguimiento:
+                return False
+            self.revision_seguimiento = revision
+            if self.es_directorio_seguimiento():
+                self.refrescar_directorio()
+                return True
+            if not self.directorio and not self.exploracion and self.pestana in ("inicio", "series"):
+                posicion = self.posicion()
+                self.cargar(self.pestana)
+                self.restaurar_foco(posicion)
+                return True
+            return False
 
         def filtrar_directorio(self, destino):
             datos = menu_visual.parametros(destino)
@@ -615,13 +646,18 @@ def abrir(addon, perfil, t, url, favoritas=(), con_trakt=False, log=print,
                     return self.cargar("inicio")
                 return self.close()
             if codigo == 117:
+                self.actualizar_progreso()
                 return self.contexto()
+            if codigo in (1, 2, 3, 4):
+                self.actualizar_progreso()
             if self.exploracion and not self.directorio and codigo in (5, 6):
                 pagina = self.pagina_actual + (1 if codigo == 6 else -1)
                 if 1 <= pagina <= self.total_genero:
                     self.pagina_genero(pagina)
 
         def onClick(self, control_id):
+            if self.actualizar_progreso() and control_id != 200:
+                return
             item = self.getControl(control_id).getSelectedItem()
             if not item:
                 return

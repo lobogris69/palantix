@@ -983,12 +983,17 @@ def fuentes_episodios(sid, datos, capitulos):
     return confirmados, pendientes
 
 
+def refrescar_seguimiento(t):
+    if t:
+        vistos = trakt.Trakt(AJ, log=log, timeout=5).historial_episodios(CACHE) if seguimiento.leer(PERFIL) else {}
+        novedades.refrescar(PERFIL, t, log=log, vistos_trakt=vistos)
+        _CACHE.pop("seguimiento", None)
+        _CACHE.pop("novedades", None)
+
+
 def seguir_viendo(t):
     """Muestra las series en seguimiento, con filtros por estado desde la sección Series."""
-    if t:
-        vistos = trakt.Trakt(AJ, log=log, timeout=5).historial_episodios(CACHE) if mis_series() else {}
-        novedades.refrescar(PERFIL, t, log=log, vistos_trakt=vistos)
-        _CACHE.pop("novedades", None)
+    refrescar_seguimiento(t)
     xbmcplugin.setContent(HANDLE, "episodes")
     filtro = PARAMS.get("estado", "")
     ocultar = not filtro and ADDON.getSetting("ocultar_al_dia") != "false"
@@ -1013,12 +1018,15 @@ def seguir_viendo(t):
             continue
         if sig:
             cabecera = "%s · %dx%02d. %s" % (d["titulo"], sig["s"], sig["e"], sig["nombre"])
+            if sig.get("pendiente_anterior"):
+                cabecera += " · Pendiente anterior"
             li = xbmcgui.ListItem("%s  %s" % (cabecera, marca_serie(sid)))
             li.setProperty("IsPlayable", "true")
             destino = url(accion="reproducir", tipo="episodio", s=sig["s"], e=sig["e"],
                           capitulo=sig["nombre"], poster=d.get("poster", ""), fondo=d.get("fanart", ""), **comun)
             es_carpeta = False
-            texto = "[B]Siguiente:[/B] %dx%02d · %s\n[B]Emitido:[/B] %s\n[B]Te quedan:[/B] %d capítulo%s\n\n%s" % (
+            texto = "[B]%s:[/B] %dx%02d · %s\n[B]Emitido:[/B] %s\n[B]Te quedan:[/B] %d capítulo%s\n\n%s" % (
+                "Pendiente anterior" if sig.get("pendiente_anterior") else "Siguiente",
                 sig["s"], sig["e"], sig["nombre"], fecha_es(sig.get("emitido")), n.get("pendientes", 0),
                 "" if n.get("pendientes") == 1 else "s", sig.get("sinopsis", ""))
         else:
@@ -1058,7 +1066,8 @@ def seguir_viendo(t):
         acciones = [("Ver temporadas", "Container.Update(%s)" % url(accion="temporadas", **comun)),
                     ("Quitar de seguimiento", "RunPlugin(%s)" % url(accion="dejar_seguir", id=sid))]
         if confirmados and sig and (sig["s"], sig["e"]) not in confirmados:
-            s_disp, e_disp = min(confirmados)
+            actual = (sig["s"], sig["e"])
+            s_disp, e_disp = min(confirmados, key=lambda cap: (cap < actual, cap))
             reproducible = url(accion="reproducir", tipo="episodio", s=s_disp, e=e_disp,
                               poster=d.get("poster", ""), fondo=d.get("fanart", ""), **comun)
             acciones.insert(0, ("Ver %dx%02d con fuente" % (s_disp, e_disp), "PlayMedia(%s)" % reproducible))
@@ -2670,7 +2679,8 @@ def abrir_inicio():
         inicio.abrir(ADDON, PERFIL, t, url, favoritas=leer_favoritas(), con_trakt=tk, log=log,
                      filtrar_peliculas=peliculas_disponibles,
                      cargar_exploracion=lambda parametros, pagina: resultados_explorar(t, pagina, parametros),
-                     cargar_directorio=lambda destino, mutacion=False: cargar_menu_visual(t, destino, mutacion))
+                     cargar_directorio=lambda destino, mutacion=False: cargar_menu_visual(t, destino, mutacion),
+                     refrescar_seguimiento=lambda: refrescar_seguimiento(t))
     except Exception as e:  # si la pantalla nueva fallase en alguna tele, que no te quedes sin Palantix
         log("Inicio falló, abro el menú clásico: %s" % e)
         xbmc.executebuiltin("Container.Update(%s)" % url(accion="clasico"))
