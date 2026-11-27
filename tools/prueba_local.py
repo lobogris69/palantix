@@ -123,6 +123,10 @@ def _mod(nombre, **attrs):
 
 
 def _seleccionar(titulo, opciones, **ajustes):
+    if opciones and isinstance(opciones[0], ListItem) and opciones[0].label.startswith(
+            ("Reanudar desde ", "Volver a ver", "Reproducir desde el principio")):
+        REGISTRO["confirmacion_capitulo"] = (titulo, opciones)
+        return REGISTRO.get("confirmar_capitulo", 0)
     REGISTRO["selector"] = (titulo, opciones, ajustes)
     return REGISTRO["select"]
 
@@ -149,7 +153,7 @@ _mod("xbmcplugin", SORT_METHOD_LABEL=1, SORT_METHOD_VIDEO_YEAR=2, SORT_METHOD_UN
 
 
 def abrir(consulta="", pedir_trakt=None, mostrar_guia=None, mostrar_inicio=None):
-    REGISTRO.update(items=[], resuelto=None, avisos=[], selector=None)
+    REGISTRO.update(items=[], resuelto=None, avisos=[], selector=None, confirmacion_capitulo=None)
     del LIS[:]
     sys.argv = ["plugin://plugin.video.palantix/", "1", consulta]
     for m in [m for m in sys.modules if m.startswith("resources")]:
@@ -575,10 +579,44 @@ REGISTRO["select"] = 1  # el usuario elige la 2ª del selector (la 1ª es el mag
 r = abrir(EP)
 comprobar("capítulo: selector ordenado y reproduce la elegida",
           r["resuelto"] == (True, "https://ejemplo.invalid/ficcion.s01e02.CASTELLANO.2160p.mkv"))
-_, opciones, _ = r["selector"]
+titulo_selector, opciones, _ = r["selector"]
+identidad, confirmacion = r["confirmacion_capitulo"]
+comprobar("capítulo: identifica la serie, el número, el título y el estado antes de listar las fuentes",
+          identidad == "1x02 · Ficción" and confirmacion[0].label2 == "Dos · Pendiente"
+          and titulo_selector.startswith("1x02 · Ficción · Pendiente"))
 comprobar("la primera línea de las opciones distingue castellano y latino",
           opciones[1].label == "Castellano · 4K · MKV" and
           any(op.label == "Latino · 1080p · MKV" for op in opciones))
+from resources.lib import progreso as progreso_capitulos  # noqa: E402
+en_curso = {"tipo": "episodio", "tmdb": 100, "s": 1, "e": 2, "titulo": "Ficción"}
+progreso_capitulos.apuntar(TMP, en_curso, 170, 2700)
+with patch.dict(REGISTRO, {"confirmar_capitulo": 0, "select": 1}):
+    r = abrir(EP)
+    li = r["li"]
+    comprobar("capítulo: reanudar en 2:50 entrega el punto y la duración al marcador nativo de Kodi",
+              r["resuelto"][0] and li.tag.datos.get("setResumePoint") == (170.0, 2700.0)
+              and li.tag.datos.get("setEpisode") == (2,)
+              and "Desde 2:50" in r["selector"][0]
+              and r["confirmacion_capitulo"][1][0].label == "Reanudar desde 2:50")
+    repetir = json.loads(PROPIEDADES["palantix.meta"])["reintento"]
+    _, _, consulta_reintento = repetir.partition("?")
+    r = abrir("?" + consulta_reintento)
+    comprobar("capítulo: otra fuente conserva la elección de reanudar",
+              r["resuelto"][0] and r["li"].tag.datos.get("setResumePoint") == (170.0, 2700.0)
+              and r["confirmacion_capitulo"] is None)
+with patch.dict(REGISTRO, {"confirmar_capitulo": 1, "select": 1}):
+    r = abrir(EP)
+    comprobar("capítulo: empezar desde cero sustituye el marcador anterior",
+              r["resuelto"][0] and r["li"].tag.datos.get("setResumePoint") == (0.0, 2700.0))
+with patch.dict(REGISTRO, {"confirmar_capitulo": -1}):
+    r = abrir(EP)
+    comprobar("capítulo: cancelar la identificación no abre el selector ni reproduce",
+              r["resuelto"][0] is False and r["selector"] is None)
+with patch.dict(AJUSTES, {"series_sin_destripes": "true"}), patch.dict(REGISTRO, {"select": 1}):
+    r = abrir(EP + "&capitulo=Dos")
+    comprobar("capítulo: la confirmación respeta la opción sin destripes",
+              r["confirmacion_capitulo"][1][0].label2 == "A medias")
+progreso_capitulos.quitar(TMP, progreso_capitulos.clave(en_curso))
 REGISTRO["select"] = 0
 from resources.lib import etiquetas as et  # noqa: E402
 from resources.lib.providers import ListaURL as LU, Peli as P  # noqa: E402
@@ -781,10 +819,12 @@ comprobar("a medias: título con «20:00 de 1:34:00» y barra de progreso", "20:
           and LIS[0].tag.datos.get("setResumePoint") == (1200.0, 5640.0))
 REGISTRO["menu"] = 0
 r = abrir("?" + urlencode({"accion": "reproducir", "id": 653, "titulo": "Nosferatu", "anio": "1922"}))
-comprobar("reanudar: empieza en el segundo 1200", r["resuelto"][0] and REGISTRO["li"].props.get("StartOffset") == "1200")
+comprobar("película: entrega a Kodi un marcador en el segundo 1200",
+          r["resuelto"][0] and REGISTRO["li"].tag.datos.get("setResumePoint") == (1200.0, 5640.0))
 REGISTRO["menu"] = 1
 r = abrir("?" + urlencode({"accion": "reproducir", "id": 653, "titulo": "Nosferatu", "anio": "1922"}))
-comprobar("desde el principio: sin punto de inicio", r["resuelto"][0] and "StartOffset" not in REGISTRO["li"].props)
+comprobar("película: desde el principio reemplaza el marcador de Kodi",
+          r["resuelto"][0] and REGISTRO["li"].tag.datos.get("setResumePoint") == (0.0, 5640.0))
 comprobar("progreso: al 95 % se da por vista y desaparece", pg.apuntar(TMP, pm, 5400, 5640) == "borrado" and not pg.peliculas(TMP))
 REGISTRO["menu"] = 0
 

@@ -262,7 +262,8 @@ def datos_filas(perfil, t, url, favoritas=(), filtrar_peliculas=lambda pelis: pe
              "destacado": "● NUEVO CAPÍTULO" if n.get("nuevo") else "",
              "nuevo": "1" if n.get("nuevo") else "", "tipo": "reproducir",
              "url": url(accion="reproducir", tipo="episodio", id=sid, titulo=d["titulo"], original=d.get("original", ""),
-                        anio=d.get("anio", ""), s=sig["s"], e=sig["e"], poster=d.get("poster", ""), fondo=d.get("fanart", ""))}
+                        anio=d.get("anio", ""), s=sig["s"], e=sig["e"], capitulo=sig["nombre"],
+                        poster=d.get("poster", ""), fondo=d.get("fanart", ""))}
         if ocultar_destripes:
             e["thumb"] = _img(d.get("fanart"), "w780")
             e["plot"] = "%dx%02d" % (sig["s"], sig["e"])
